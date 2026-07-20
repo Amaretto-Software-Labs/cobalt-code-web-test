@@ -1,30 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, FileText, Menu, Palette, Plus, Search, Trash2, X } from "lucide-react";
-
-const NOTE_COLORS = [
-  { id: "coral", label: "Coral", value: "#e2673f" },
-  { id: "gold", label: "Gold", value: "#d5a83d" },
-  { id: "sage", label: "Sage", value: "#769475" },
-  { id: "sky", label: "Sky", value: "#668fa9" },
-  { id: "lilac", label: "Lilac", value: "#9179a8" },
-  { id: "graphite", label: "Graphite", value: "#696d68" },
-] as const;
-
-type NoteColor = (typeof NOTE_COLORS)[number]["id"];
-
-type Note = {
-  id: string;
-  title: string;
-  body: string;
-  color: NoteColor;
-  updatedAt: number;
-};
-
-type SaveStatus = "loading" | "saved" | "saving" | "error";
-
-const STORAGE_KEY = "papier-notes";
+import { NOTE_COLORS, type Note } from "@/domain/note";
+import { useNotes } from "@/hooks/use-notes";
 
 function preview(note: Note) {
   return note.body.trim() || "No additional text";
@@ -40,64 +19,10 @@ function relativeTime(timestamp: number) {
 }
 
 export default function NotesPage() {
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const { notes, activeId, setActiveId, ready, saveStatus, create, update, remove } = useNotes();
   const [query, setQuery] = useState("");
-  const [ready, setReady] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("loading");
-  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadNotes() {
-      try {
-        const response = await fetch("/api/notes");
-        if (!response.ok) throw new Error("Could not load notes");
-
-        let databaseNotes = (await response.json()) as Note[];
-        const saved = localStorage.getItem(STORAGE_KEY);
-
-        if (databaseNotes.length === 0 && saved) {
-          const localNotes = (
-            JSON.parse(saved) as Array<Omit<Note, "color"> & { color?: NoteColor }>
-          ).map((note) => ({ ...note, color: note.color ?? "coral" }));
-
-          await Promise.all(
-            localNotes.map(async (note) => {
-              const migration = await fetch("/api/notes", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(note),
-              });
-              if (!migration.ok) throw new Error("Could not migrate notes");
-            }),
-          );
-          databaseNotes = localNotes;
-        }
-
-        localStorage.removeItem(STORAGE_KEY);
-        if (!cancelled) {
-          setNotes(databaseNotes);
-          setActiveId(databaseNotes[0]?.id ?? null);
-          setSaveStatus("saved");
-        }
-      } catch {
-        if (!cancelled) setSaveStatus("error");
-      } finally {
-        if (!cancelled) setReady(true);
-      }
-    }
-
-    loadNotes();
-    const timers = saveTimers.current;
-    return () => {
-      cancelled = true;
-      Object.values(timers).forEach(clearTimeout);
-    };
-  }, []);
 
   useEffect(() => {
     if (!confirmingDelete) return;
@@ -117,75 +42,22 @@ export default function NotesPage() {
 
   const activeNote = notes.find((note) => note.id === activeId) ?? null;
 
-  async function createNote() {
-    const note: Note = {
-      id: crypto.randomUUID(),
-      title: "",
-      body: "",
-      color: "coral",
-      updatedAt: Date.now(),
-    };
-    setNotes((current) => [note, ...current]);
-    setActiveId(note.id);
+  function createNote() {
+    create();
     setSidebarOpen(false);
-    setSaveStatus("saving");
-
-    try {
-      const response = await fetch("/api/notes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(note),
-      });
-      if (!response.ok) throw new Error("Could not create note");
-      setSaveStatus("saved");
-    } catch {
-      setSaveStatus("error");
-    }
   }
 
   function updateNote(changes: Partial<Pick<Note, "title" | "body" | "color">>) {
     if (!activeNote) return;
-    const updatedNote = { ...activeNote, ...changes };
-    setNotes((current) => current.map((note) => (note.id === activeId ? updatedNote : note)));
-    setSaveStatus("saving");
-
-    clearTimeout(saveTimers.current[updatedNote.id]);
-    saveTimers.current[updatedNote.id] = setTimeout(async () => {
-      try {
-        const response = await fetch(`/api/notes/${updatedNote.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updatedNote),
-        });
-        if (!response.ok) throw new Error("Could not save note");
-        const savedNote = (await response.json()) as { updatedAt: number };
-        setNotes((current) =>
-          current.map((note) =>
-            note.id === updatedNote.id ? { ...note, updatedAt: savedNote.updatedAt } : note,
-          ),
-        );
-        setSaveStatus("saved");
-      } catch {
-        setSaveStatus("error");
-      }
-    }, 450);
+    update(activeNote.id, changes);
   }
 
   async function deleteNote() {
     if (!activeNote) return;
-    setSaveStatus("saving");
-    clearTimeout(saveTimers.current[activeNote.id]);
-
     try {
-      const response = await fetch(`/api/notes/${activeNote.id}`, { method: "DELETE" });
-      if (!response.ok) throw new Error("Could not delete note");
-      const remaining = notes.filter((note) => note.id !== activeNote.id);
-      setNotes(remaining);
-      setActiveId(remaining[0]?.id ?? null);
-      setSaveStatus("saved");
+      await remove(activeNote.id);
       setConfirmingDelete(false);
     } catch {
-      setSaveStatus("error");
       setConfirmingDelete(false);
     }
   }

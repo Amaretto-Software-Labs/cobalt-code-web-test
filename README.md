@@ -1,22 +1,29 @@
-# Cobalt Code Web Test
+# Papier Notes
 
-This repository is a lightweight test project for validating Cobalt Code web development workflows and repository operations.
+Papier is a minimal note-taking application built with Next.js, Tailwind CSS, and PostgreSQL.
 
-## Purpose
+## Local development
 
-Use this repository for isolated experiments, demonstrations, and checks that do not belong in a production codebase.
+Copy the example environment configuration and install dependencies:
 
-## Getting started
-
-Clone the repository and add the files needed for your test:
-
-```bash
-git clone https://github.com/Amaretto-Software-Labs/cobalt-code-web-test.git
-cd cobalt-code-web-test
+```sh
+cp .env.example .env.local
+npm install
+npm run dev
 ```
 
-Document any additional setup or run instructions alongside the code as the project evolves.
+The configured PostgreSQL database must be available before starting the application. The app initializes its `notes` table automatically.
 
-## Status
+## API documentation
 
-This repository currently contains only its introductory documentation.
+With the app running, interactive Swagger documentation is available at [http://localhost:3000/docs](http://localhost:3000/docs). The raw OpenAPI document is served from [http://localhost:3000/api/openapi](http://localhost:3000/api/openapi).
+
+## Quality checks
+
+```sh
+npm run lint
+npm run test:all
+npm run build
+```
+
+The integration suite requires the PostgreSQL connection defined by `DATABASE_URL`.
