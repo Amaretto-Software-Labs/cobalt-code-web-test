@@ -85,9 +85,12 @@ button { color: inherit; }
 .no-results { padding: 26px 8px; color: #999a92; font-size: 12px; text-align: center; }
 .sidebar-footer { display: flex; align-items: center; justify-content: center; gap: 7px; padding-top: 15px; border-top: 1px solid #e2e0d8; color: #a1a29a; font-size: 10px; }
 .status-dot { width: 5px; height: 5px; border-radius: 50%; background: #7da477; }
+.status-loading, .status-saving { background: #d5a83d; animation: status-pulse 1.2s ease-in-out infinite; }
+.status-error { background: #c9583a; }
 
 .workspace { display: flex; min-height: 100vh; flex: 1; margin-left: 310px; background-color: var(--paper); background-image: radial-gradient(#dedcd2 0.55px, transparent 0.55px); background-size: 17px 17px; }
 .empty-state { display: flex; width: min(440px, calc(100% - 48px)); margin: auto; flex-direction: column; align-items: center; text-align: center; transform: translateY(-10px); }
+.loading-state { margin: auto; color: #999a92; font-family: Georgia, "Times New Roman", serif; font-size: 14px; }
 .empty-icon { display: grid; width: 68px; height: 68px; place-items: center; margin-bottom: 25px; border: 1px solid #dedcd4; border-radius: 19px; background: #fffefa; color: #6e7069; box-shadow: 0 8px 25px #4a4b4510; transform: rotate(-2deg); }
 .empty-state h1 { margin: 0 0 12px; font-family: Georgia, "Times New Roman", serif; font-size: clamp(28px, 4vw, 38px); letter-spacing: -1.25px; line-height: 1.15; }
 .empty-state p { max-width: 350px; margin: 0 0 28px; color: var(--muted); font-family: Georgia, "Times New Roman", serif; font-size: 16px; line-height: 1.55; }
@@ -112,6 +115,23 @@ kbd { border: 1px solid #deddd7; border-bottom-width: 2px; border-radius: 4px; b
 .body-input { width: 100%; min-height: 400px; flex: 1; resize: none; margin-top: 32px; border: 0; outline: 0; background: transparent; color: #484a44; font-family: Georgia, "Times New Roman", serif; font-size: 18px; line-height: 1.85; }
 .body-input::placeholder { color: #b2b2aa; }
 .mobile-header, .mobile-close, .scrim { display: none; }
+
+.dialog-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: #292a254d; padding: 24px; backdrop-filter: blur(3px); animation: fade-in .15s ease-out; }
+.confirm-dialog { display: grid; width: min(430px, 100%); grid-template-columns: auto 1fr; gap: 0 15px; border: 1px solid #dedbd2; border-radius: 16px; background: #fffefa; padding: 24px; box-shadow: 0 24px 70px #22231f30; animation: dialog-in .18s ease-out; }
+.dialog-icon { display: grid; width: 42px; height: 42px; place-items: center; grid-row: 1 / 3; border-radius: 11px; background: #f8e7e1; color: #b84d2d; }
+.dialog-copy h2 { margin: 1px 0 7px; font-family: Georgia, "Times New Roman", serif; font-size: 21px; letter-spacing: -.35px; }
+.dialog-copy p { margin: 0; color: #777970; font-size: 13px; line-height: 1.55; }
+.dialog-actions { display: flex; grid-column: 1 / -1; justify-content: flex-end; gap: 9px; margin-top: 24px; }
+.dialog-actions button { display: flex; height: 38px; align-items: center; gap: 7px; border-radius: 8px; padding: 0 14px; font-size: 12px; font-weight: 750; cursor: pointer; }
+.dialog-cancel { border: 1px solid #dedcd4; background: #fffefa; color: #5f615b; }
+.dialog-cancel:hover { background: #f3f2ec; }
+.dialog-delete { border: 1px solid #b84d2d; background: #b84d2d; color: white; box-shadow: 0 3px 9px #b84d2d2b; }
+.dialog-delete:hover { border-color: #a44226; background: #a44226; }
+.dialog-actions button:focus-visible { outline: 2px solid #847267; outline-offset: 2px; }
+
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes dialog-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+@keyframes status-pulse { 50% { opacity: .35; transform: scale(.8); } }
 
 @media (max-width: 760px) {
   .sidebar { width: min(310px, 88vw); transform: translateX(-105%); transition: transform .22s ease; box-shadow: 12px 0 35px #28292420; }

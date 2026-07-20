@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { FileText, Menu, Palette, Plus, Search, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, FileText, Menu, Palette, Plus, Search, Trash2, X } from "lucide-react";
 
 const NOTE_COLORS = [
   { id: "coral", label: "Coral", value: "#e2673f" },
@@ -21,6 +21,8 @@ type Note = {
   color: NoteColor;
   updatedAt: number;
 };
+
+type SaveStatus = "loading" | "saved" | "saving" | "error";
 
 const STORAGE_KEY = "papier-notes";
 
@@ -43,25 +45,68 @@ export default function NotesPage() {
   const [query, setQuery] = useState("");
   const [ready, setReady] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("loading");
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = (JSON.parse(saved) as Array<Omit<Note, "color"> & { color?: NoteColor }>).map(
-          (note) => ({ ...note, color: note.color ?? "coral" }),
-        );
-        setNotes(parsed);
-        setActiveId(parsed[0]?.id ?? null);
+    let cancelled = false;
+
+    async function loadNotes() {
+      try {
+        const response = await fetch("/api/notes");
+        if (!response.ok) throw new Error("Could not load notes");
+
+        let databaseNotes = (await response.json()) as Note[];
+        const saved = localStorage.getItem(STORAGE_KEY);
+
+        if (databaseNotes.length === 0 && saved) {
+          const localNotes = (
+            JSON.parse(saved) as Array<Omit<Note, "color"> & { color?: NoteColor }>
+          ).map((note) => ({ ...note, color: note.color ?? "coral" }));
+
+          await Promise.all(
+            localNotes.map(async (note) => {
+              const migration = await fetch("/api/notes", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(note),
+              });
+              if (!migration.ok) throw new Error("Could not migrate notes");
+            }),
+          );
+          databaseNotes = localNotes;
+        }
+
+        localStorage.removeItem(STORAGE_KEY);
+        if (!cancelled) {
+          setNotes(databaseNotes);
+          setActiveId(databaseNotes[0]?.id ?? null);
+          setSaveStatus("saved");
+        }
+      } catch {
+        if (!cancelled) setSaveStatus("error");
+      } finally {
+        if (!cancelled) setReady(true);
       }
-    } finally {
-      setReady(true);
     }
+
+    loadNotes();
+    const timers = saveTimers.current;
+    return () => {
+      cancelled = true;
+      Object.values(timers).forEach(clearTimeout);
+    };
   }, []);
 
   useEffect(() => {
-    if (ready) localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-  }, [notes, ready]);
+    if (!confirmingDelete) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setConfirmingDelete(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [confirmingDelete]);
 
   const filteredNotes = useMemo(() => {
     const normalized = query.toLowerCase().trim();
@@ -72,7 +117,7 @@ export default function NotesPage() {
 
   const activeNote = notes.find((note) => note.id === activeId) ?? null;
 
-  function createNote() {
+  async function createNote() {
     const note: Note = {
       id: crypto.randomUUID(),
       title: "",
@@ -83,21 +128,66 @@ export default function NotesPage() {
     setNotes((current) => [note, ...current]);
     setActiveId(note.id);
     setSidebarOpen(false);
+    setSaveStatus("saving");
+
+    try {
+      const response = await fetch("/api/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(note),
+      });
+      if (!response.ok) throw new Error("Could not create note");
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("error");
+    }
   }
 
   function updateNote(changes: Partial<Pick<Note, "title" | "body" | "color">>) {
-    setNotes((current) =>
-      current.map((note) =>
-        note.id === activeId ? { ...note, ...changes, updatedAt: Date.now() } : note,
-      ),
-    );
+    if (!activeNote) return;
+    const updatedNote = { ...activeNote, ...changes };
+    setNotes((current) => current.map((note) => (note.id === activeId ? updatedNote : note)));
+    setSaveStatus("saving");
+
+    clearTimeout(saveTimers.current[updatedNote.id]);
+    saveTimers.current[updatedNote.id] = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/notes/${updatedNote.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatedNote),
+        });
+        if (!response.ok) throw new Error("Could not save note");
+        const savedNote = (await response.json()) as { updatedAt: number };
+        setNotes((current) =>
+          current.map((note) =>
+            note.id === updatedNote.id ? { ...note, updatedAt: savedNote.updatedAt } : note,
+          ),
+        );
+        setSaveStatus("saved");
+      } catch {
+        setSaveStatus("error");
+      }
+    }, 450);
   }
 
-  function deleteNote() {
+  async function deleteNote() {
     if (!activeNote) return;
-    const remaining = notes.filter((note) => note.id !== activeNote.id);
-    setNotes(remaining);
-    setActiveId(remaining[0]?.id ?? null);
+    setSaveStatus("saving");
+    clearTimeout(saveTimers.current[activeNote.id]);
+
+    try {
+      const response = await fetch(`/api/notes/${activeNote.id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Could not delete note");
+      const remaining = notes.filter((note) => note.id !== activeNote.id);
+      setNotes(remaining);
+      setActiveId(remaining[0]?.id ?? null);
+      setSaveStatus("saved");
+      setConfirmingDelete(false);
+    } catch {
+      setSaveStatus("error");
+      setConfirmingDelete(false);
+    }
   }
 
   return (
@@ -155,8 +245,13 @@ export default function NotesPage() {
         </div>
 
         <div className="sidebar-footer">
-          <span>Notes are saved on this device</span>
-          <span className="status-dot" />
+          <span>
+            {saveStatus === "loading" && "Connecting to database…"}
+            {saveStatus === "saving" && "Saving to database…"}
+            {saveStatus === "saved" && "Saved to PostgreSQL"}
+            {saveStatus === "error" && "Database connection failed"}
+          </span>
+          <span className={`status-dot status-${saveStatus}`} />
         </div>
       </aside>
 
@@ -167,7 +262,9 @@ export default function NotesPage() {
           <button className="icon-button" onClick={createNote} aria-label="New note"><Plus size={20} /></button>
         </header>
 
-        {activeNote ? (
+        {!ready ? (
+          <div className="loading-state">Loading your notes…</div>
+        ) : activeNote ? (
           <article className="editor">
             <div className="editor-toolbar">
               <span>Last edited {relativeTime(activeNote.updatedAt)}</span>
@@ -186,7 +283,7 @@ export default function NotesPage() {
                     />
                   ))}
                 </div>
-                <button className="icon-button danger" onClick={deleteNote} aria-label="Delete note"><Trash2 size={17} /></button>
+                <button className="icon-button danger" onClick={() => setConfirmingDelete(true)} aria-label="Delete note"><Trash2 size={17} /></button>
               </div>
             </div>
             <div className="paper">
@@ -217,6 +314,31 @@ export default function NotesPage() {
           </div>
         )}
       </section>
+
+      {confirmingDelete && activeNote && (
+        <div className="dialog-backdrop" onMouseDown={() => setConfirmingDelete(false)}>
+          <div
+            className="confirm-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-dialog-title"
+            aria-describedby="delete-dialog-description"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="dialog-icon"><AlertTriangle size={21} strokeWidth={1.8} /></div>
+            <div className="dialog-copy">
+              <h2 id="delete-dialog-title">Delete this note?</h2>
+              <p id="delete-dialog-description">
+                “{activeNote.title.trim() || "Untitled note"}” will be permanently removed from the database.
+              </p>
+            </div>
+            <div className="dialog-actions">
+              <button className="dialog-cancel" onClick={() => setConfirmingDelete(false)} autoFocus>Cancel</button>
+              <button className="dialog-delete" onClick={deleteNote}><Trash2 size={15} />Delete note</button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
