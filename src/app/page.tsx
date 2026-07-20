@@ -1,12 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FileText, Menu, MoreHorizontal, Plus, Search, Trash2, X } from "lucide-react";
+import { FileText, Menu, Palette, Plus, Search, Trash2, X } from "lucide-react";
+
+const NOTE_COLORS = [
+  { id: "coral", label: "Coral", value: "#e2673f" },
+  { id: "gold", label: "Gold", value: "#d5a83d" },
+  { id: "sage", label: "Sage", value: "#769475" },
+  { id: "sky", label: "Sky", value: "#668fa9" },
+  { id: "lilac", label: "Lilac", value: "#9179a8" },
+  { id: "graphite", label: "Graphite", value: "#696d68" },
+] as const;
+
+type NoteColor = (typeof NOTE_COLORS)[number]["id"];
 
 type Note = {
   id: string;
   title: string;
   body: string;
+  color: NoteColor;
   updatedAt: number;
 };
 
@@ -36,7 +48,9 @@ export default function NotesPage() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        const parsed = JSON.parse(saved) as Note[];
+        const parsed = (JSON.parse(saved) as Array<Omit<Note, "color"> & { color?: NoteColor }>).map(
+          (note) => ({ ...note, color: note.color ?? "coral" }),
+        );
         setNotes(parsed);
         setActiveId(parsed[0]?.id ?? null);
       }
@@ -59,13 +73,19 @@ export default function NotesPage() {
   const activeNote = notes.find((note) => note.id === activeId) ?? null;
 
   function createNote() {
-    const note: Note = { id: crypto.randomUUID(), title: "", body: "", updatedAt: Date.now() };
+    const note: Note = {
+      id: crypto.randomUUID(),
+      title: "",
+      body: "",
+      color: "coral",
+      updatedAt: Date.now(),
+    };
     setNotes((current) => [note, ...current]);
     setActiveId(note.id);
     setSidebarOpen(false);
   }
 
-  function updateNote(changes: Partial<Pick<Note, "title" | "body">>) {
+  function updateNote(changes: Partial<Pick<Note, "title" | "body" | "color">>) {
     setNotes((current) =>
       current.map((note) =>
         note.id === activeId ? { ...note, ...changes, updatedAt: Date.now() } : note,
@@ -117,9 +137,13 @@ export default function NotesPage() {
             <button
               className={`note-card ${note.id === activeId ? "note-card-active" : ""}`}
               key={note.id}
+              style={{ "--note-color": NOTE_COLORS.find((color) => color.id === note.color)?.value } as React.CSSProperties}
               onClick={() => { setActiveId(note.id); setSidebarOpen(false); }}
             >
-              <span className="note-card-title">{note.title.trim() || "Untitled note"}</span>
+              <span className="note-card-title-row">
+                <span className="note-color-dot" />
+                <span className="note-card-title">{note.title.trim() || "Untitled note"}</span>
+              </span>
               <span className="note-card-preview">{preview(note)}</span>
               <span className="note-card-time">{relativeTime(note.updatedAt)}</span>
             </button>
@@ -147,8 +171,21 @@ export default function NotesPage() {
           <article className="editor">
             <div className="editor-toolbar">
               <span>Last edited {relativeTime(activeNote.updatedAt)}</span>
-              <div>
-                <button className="icon-button" aria-label="More options"><MoreHorizontal size={19} /></button>
+              <div className="toolbar-actions">
+                <div className="color-picker" aria-label="Note color">
+                  <Palette size={16} aria-hidden="true" />
+                  {NOTE_COLORS.map((color) => (
+                    <button
+                      key={color.id}
+                      className={`color-swatch ${activeNote.color === color.id ? "color-swatch-active" : ""}`}
+                      style={{ backgroundColor: color.value }}
+                      onClick={() => updateNote({ color: color.id })}
+                      aria-label={`Tag as ${color.label}`}
+                      aria-pressed={activeNote.color === color.id}
+                      title={color.label}
+                    />
+                  ))}
+                </div>
                 <button className="icon-button danger" onClick={deleteNote} aria-label="Delete note"><Trash2 size={17} /></button>
               </div>
             </div>
