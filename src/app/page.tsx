@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, FileText, Menu, Palette, Plus, Search, Trash2, X } from "lucide-react";
+import { AlertTriangle, FileText, Menu, Moon, Palette, Plus, Search, Sun, Trash2, X } from "lucide-react";
 import { NOTE_COLORS, type Note } from "@/domain/note";
 import { useNotes } from "@/hooks/use-notes";
+import { useTheme } from "@/hooks/use-theme";
 
 function preview(note: Note) {
   return note.body.trim() || "No additional text";
@@ -20,6 +21,7 @@ function relativeTime(timestamp: number) {
 
 export default function NotesPage() {
   const { notes, activeId, setActiveId, ready, saveStatus, create, update, remove } = useNotes();
+  const { toggleTheme } = useTheme();
   const [query, setQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -62,6 +64,18 @@ export default function NotesPage() {
     }
   }
 
+  const themeToggle = (
+    <button
+      className="icon-button theme-toggle"
+      onClick={toggleTheme}
+      aria-label="Toggle color theme"
+      title="Toggle color theme"
+    >
+      <Sun className="theme-icon theme-icon-sun" size={17} />
+      <Moon className="theme-icon theme-icon-moon" size={17} />
+    </button>
+  );
+
   return (
     <main className="app-shell">
       {sidebarOpen && (
@@ -72,6 +86,7 @@ export default function NotesPage() {
         <div className="brand-row">
           <div className="brand-mark" aria-hidden="true"><span /></div>
           <span className="brand-name">papier</span>
+          <span className="desktop-theme-toggle">{themeToggle}</span>
           <button className="icon-button mobile-close" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar">
             <X size={18} />
           </button>
@@ -131,7 +146,10 @@ export default function NotesPage() {
         <header className="mobile-header">
           <button className="icon-button" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar"><Menu size={20} /></button>
           <div className="mobile-brand"><div className="brand-mark small"><span /></div>papier</div>
-          <button className="icon-button" onClick={createNote} aria-label="New note"><Plus size={20} /></button>
+          <div className="mobile-header-actions">
+            {themeToggle}
+            <button className="icon-button" onClick={createNote} aria-label="New note"><Plus size={20} /></button>
+          </div>
         </header>
 
         {!ready ? (
