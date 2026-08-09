@@ -14,21 +14,38 @@ export function useNotes() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("loading");
+  const [canRetry, setCanRetry] = useState(false);
   const notesRef = useRef<Note[]>([]);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const queues = useRef(new Map<string, Promise<unknown>>());
   const pendingNotes = useRef(new Map<string, Note>());
+  const failedNotes = useRef(new Map<string, Note>());
   const operationCount = useRef(0);
+  const lastOperationFailed = useRef(false);
+  const readyRef = useRef(false);
+  const loadFailed = useRef(false);
+
+  function refreshPersistence() {
+    if (!readyRef.current) return;
+    setCanRetry(failedNotes.current.size > 0);
+    if (loadFailed.current || lastOperationFailed.current || failedNotes.current.size > 0) {
+      setSaveStatus("error");
+    } else if (pendingNotes.current.size > 0 || timers.current.size > 0 || operationCount.current > 0) {
+      setSaveStatus("saving");
+    } else {
+      setSaveStatus("saved");
+    }
+  }
 
   function beginOperation() {
     operationCount.current += 1;
-    setSaveStatus("saving");
+    lastOperationFailed.current = false;
+    refreshPersistence();
   }
 
-  function finishOperation(error?: unknown) {
+  function finishOperation() {
     operationCount.current = Math.max(0, operationCount.current - 1);
-    if (error) setSaveStatus("error");
-    else if (operationCount.current === 0) setSaveStatus("saved");
+    refreshPersistence();
   }
 
   function enqueue<T>(id: string, operation: () => Promise<T>): Promise<T> {
@@ -44,9 +61,10 @@ export function useNotes() {
         clearQueue();
         finishOperation();
       },
-      (error) => {
+      () => {
         clearQueue();
-        finishOperation(error);
+        lastOperationFailed.current = true;
+        finishOperation();
       },
     );
     return next;
@@ -70,10 +88,16 @@ export function useNotes() {
           notesRef.current = databaseNotes;
           setNotes(databaseNotes);
           setActiveId(databaseNotes[0]?.id ?? null);
-          setSaveStatus("saved");
+          readyRef.current = true;
+          loadFailed.current = false;
+          refreshPersistence();
         }
       } catch {
-        if (!cancelled) setSaveStatus("error");
+        if (!cancelled) {
+          readyRef.current = true;
+          loadFailed.current = true;
+          refreshPersistence();
+        }
       } finally {
         if (!cancelled) setReady(true);
       }
@@ -123,7 +147,7 @@ export function useNotes() {
     notesRef.current = notesRef.current.map((note) => (note.id === id ? updatedNote : note));
     setNotes(notesRef.current);
     pendingNotes.current.set(id, updatedNote);
-    setSaveStatus("saving");
+    failedNotes.current.delete(id);
 
     clearTimeout(timers.current.get(id));
     timers.current.set(
@@ -132,28 +156,62 @@ export function useNotes() {
         timers.current.delete(id);
         const pending = pendingNotes.current.get(id);
         if (!pending) return;
-        pendingNotes.current.delete(id);
         void enqueue(id, () => notesApi.updateNote(id, pending)).then(
           (saved) => {
+            if (pendingNotes.current.get(id) === pending) {
+              pendingNotes.current.delete(id);
+              failedNotes.current.delete(id);
+            }
             notesRef.current = notesRef.current.map((note) =>
               note.id === id ? { ...note, updatedAt: saved.updatedAt } : note,
             );
             setNotes(notesRef.current);
           },
-          () => undefined,
+          () => {
+            if (pendingNotes.current.get(id) === pending) {
+              failedNotes.current.set(id, pending);
+            }
+            refreshPersistence();
+          },
         );
+        refreshPersistence();
       }, SAVE_DELAY_MS),
     );
+    refreshPersistence();
+  }
+
+  function retryFailed() {
+    for (const [id, failed] of failedNotes.current) {
+      if (pendingNotes.current.get(id) !== failed) continue;
+      failedNotes.current.delete(id);
+      void enqueue(id, () => notesApi.updateNote(id, failed)).then(
+        (saved) => {
+          if (pendingNotes.current.get(id) === failed) {
+            pendingNotes.current.delete(id);
+            notesRef.current = notesRef.current.map((note) =>
+              note.id === id ? { ...note, updatedAt: saved.updatedAt } : note,
+            );
+            setNotes(notesRef.current);
+          }
+          refreshPersistence();
+        },
+        () => {
+          if (pendingNotes.current.get(id) === failed) failedNotes.current.set(id, failed);
+          refreshPersistence();
+        },
+      );
+    }
+    refreshPersistence();
   }
 
   async function remove(id: string) {
     clearTimeout(timers.current.get(id));
     timers.current.delete(id);
     pendingNotes.current.delete(id);
+    failedNotes.current.delete(id);
     try {
       await enqueue(id, () => notesApi.deleteNote(id));
     } catch (error) {
-      setSaveStatus("error");
       throw error;
     }
     notesRef.current = notesRef.current.filter((note) => note.id !== id);
@@ -161,5 +219,16 @@ export function useNotes() {
     setActiveId((selected) => (selected === id ? (notesRef.current[0]?.id ?? null) : selected));
   }
 
-  return { notes, activeId, setActiveId, ready, saveStatus, create, update, remove };
+  return {
+    notes,
+    activeId,
+    setActiveId,
+    ready,
+    saveStatus,
+    canRetry,
+    create,
+    update,
+    retryFailed,
+    remove,
+  };
 }
