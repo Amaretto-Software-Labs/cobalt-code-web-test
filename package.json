@@ -14,11 +14,16 @@
   },
   "dependencies": {
     "lucide-react": "^1.25.0",
-    "next": "^16.2.10",
+    "next": "^16.3.0",
     "pg": "^8.22.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "swagger-ui-react": "^5.32.9"
+    "swagger-ui-react": "^5.32.12"
+  },
+  "overrides": {
+    "swagger-ui-react": {
+      "js-yaml": "4.3.1"
+    }
   },
   "devDependencies": {
     "@apidevtools/swagger-parser": "^12.1.0",
