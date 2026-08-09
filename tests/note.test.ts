@@ -3,6 +3,7 @@ import {
   NOTE_LIMITS,
   isNoteColor,
   isUuid,
+  parseCreateNoteInput,
   parseLegacyNotes,
   parseNote,
   parseNoteChanges,
@@ -42,6 +43,15 @@ describe("note domain validation", () => {
   it("validates editable fields independently", () => {
     expect(parseNoteChanges(validNote)).toEqual({ title: "A note", body: "Some text", color: "sage" });
     expect(parseNoteChanges({ ...validNote, color: "pink" })).toBeNull();
+  });
+
+  it("only accepts editable fields when creating a note", () => {
+    expect(parseCreateNoteInput(validNote)).toBeNull();
+    expect(parseCreateNoteInput({ title: "A note", body: "Some text", color: "sage" })).toEqual({
+      title: "A note",
+      body: "Some text",
+      color: "sage",
+    });
   });
 
   it("migrates legacy notes with a default color and ignores corrupt entries", () => {

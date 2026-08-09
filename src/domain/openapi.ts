@@ -45,7 +45,7 @@ export const openApiDocument = {
         operationId: "createNote",
         requestBody: {
           required: true,
-          content: { "application/json": { schema: { $ref: "#/components/schemas/Note" } } },
+          content: { "application/json": { schema: { $ref: "#/components/schemas/CreateNoteInput" } } },
         },
         responses: {
           "201": {
@@ -116,6 +116,16 @@ export const openApiDocument = {
           title: { type: "string", maxLength: NOTE_LIMITS.title, example: "Updated project ideas" },
           body: { type: "string", maxLength: NOTE_LIMITS.body, example: "Build an even quieter place to think." },
           color: { type: "string", enum: colorIds, example: "sky" },
+        },
+      },
+      CreateNoteInput: {
+        type: "object",
+        additionalProperties: false,
+        required: ["title", "body", "color"],
+        properties: {
+          title: { type: "string", maxLength: NOTE_LIMITS.title, example: "Project ideas" },
+          body: { type: "string", maxLength: NOTE_LIMITS.body, example: "Build a quiet place to think." },
+          color: { type: "string", enum: colorIds, example: "sage" },
         },
       },
       Error: {

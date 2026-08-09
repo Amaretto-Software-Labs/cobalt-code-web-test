@@ -18,6 +18,7 @@ export type Note = {
 };
 
 export type NoteChanges = Pick<Note, "title" | "body" | "color">;
+export type CreateNoteInput = NoteChanges;
 
 export const NOTE_LIMITS = {
   title: 500,
@@ -77,6 +78,14 @@ export function parseNoteChanges(value: unknown): NoteChanges | null {
   }
 
   return { title: changes.title, body: changes.body, color: changes.color };
+}
+
+export function parseCreateNoteInput(value: unknown): CreateNoteInput | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+
+  if (!Object.keys(input).every((key) => key === "title" || key === "body" || key === "color")) return null;
+  return parseNoteChanges(input);
 }
 
 export function parseNotes(value: unknown): Note[] | null {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { parseNote } from "@/domain/note";
+import { parseCreateNoteInput } from "@/domain/note";
 import { noteRepository } from "@/server/note-repository";
 
 async function readJson(request: Request): Promise<unknown> {
@@ -15,7 +15,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const note = parseNote(await readJson(request));
-  if (!note) return NextResponse.json({ error: "Invalid note" }, { status: 400 });
-  return NextResponse.json(await noteRepository.upsert(note), { status: 201 });
+  const input = parseCreateNoteInput(await readJson(request));
+  if (!input) return NextResponse.json({ error: "Invalid note" }, { status: 400 });
+  return NextResponse.json(await noteRepository.create(input), { status: 201 });
 }

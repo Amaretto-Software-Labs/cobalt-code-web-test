@@ -1,4 +1,4 @@
-import { parseNote, parseNotes, type Note, type NoteChanges } from "@/domain/note";
+import { parseNote, parseNotes, type CreateNoteInput, type Note, type NoteChanges } from "@/domain/note";
 
 export class NotesApiError extends Error {
   constructor(message: string, public readonly status: number) {
@@ -20,12 +20,12 @@ export async function listNotes(): Promise<Note[]> {
   return notes;
 }
 
-export async function createNote(note: Note): Promise<Note> {
+export async function createNote(input: CreateNoteInput): Promise<Note> {
   const created = parseNote(
     await requestJson("/api/notes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(note),
+      body: JSON.stringify(input),
     }),
   );
   if (!created) throw new NotesApiError("The server returned an invalid note", 500);
