@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import type { Note, NoteChanges, NoteColor } from "@/domain/note";
-import { db, ensureNotesSchema } from "@/lib/db";
+import { db } from "@/lib/db";
 
 type Database = Pick<Pool, "query"> | Pick<PoolClient, "query">;
 
@@ -30,10 +30,9 @@ function fromRow(row: NoteRow): Note {
 }
 
 export class PostgresNoteRepository implements NoteRepository {
-  constructor(private readonly database: Database, private readonly ensureSchema: () => Promise<void>) {}
+  constructor(private readonly database: Database) {}
 
   async list() {
-    await this.ensureSchema();
     const result = await this.database.query<NoteRow>(
       "SELECT id, title, body, color, updated_at FROM notes ORDER BY updated_at DESC",
     );
@@ -41,7 +40,6 @@ export class PostgresNoteRepository implements NoteRepository {
   }
 
   async upsert(note: Note) {
-    await this.ensureSchema();
     const result = await this.database.query<NoteRow>(
       `INSERT INTO notes (id, title, body, color, updated_at)
        VALUES ($1, $2, $3, $4, $5)
@@ -57,7 +55,6 @@ export class PostgresNoteRepository implements NoteRepository {
   }
 
   async update(id: string, changes: NoteChanges) {
-    await this.ensureSchema();
     const result = await this.database.query<NoteRow>(
       `UPDATE notes
        SET title = $2, body = $3, color = $4, updated_at = NOW()
@@ -69,10 +66,9 @@ export class PostgresNoteRepository implements NoteRepository {
   }
 
   async delete(id: string) {
-    await this.ensureSchema();
     const result = await this.database.query("DELETE FROM notes WHERE id = $1", [id]);
     return result.rowCount === 1;
   }
 }
 
-export const noteRepository = new PostgresNoteRepository(db, ensureNotesSchema);
+export const noteRepository = new PostgresNoteRepository(db);
