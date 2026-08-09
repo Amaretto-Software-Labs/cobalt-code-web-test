@@ -7,6 +7,10 @@ const errorResponses = {
     description: "The request is invalid.",
     content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
   },
+  "401": {
+    description: "A valid Bearer token is required.",
+    content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+  },
   "404": {
     description: "The note was not found.",
     content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
@@ -22,6 +26,7 @@ export const openApiDocument = {
   },
   servers: [{ url: "/", description: "Current application" }],
   tags: [{ name: "Notes", description: "Note persistence operations" }],
+  security: [{ bearerAuth: [] }],
   paths: {
     "/api/notes": {
       get: {
@@ -29,6 +34,7 @@ export const openApiDocument = {
         summary: "List notes",
         operationId: "listNotes",
         responses: {
+          "401": errorResponses["401"],
           "200": {
             description: "Notes ordered by most recently updated.",
             content: {
@@ -53,6 +59,7 @@ export const openApiDocument = {
             content: { "application/json": { schema: { $ref: "#/components/schemas/Note" } } },
           },
           "400": errorResponses["400"],
+          "401": errorResponses["401"],
         },
       },
     },
@@ -86,6 +93,9 @@ export const openApiDocument = {
     },
   },
   components: {
+    securitySchemes: {
+      bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "opaque token" },
+    },
     parameters: {
       NoteId: {
         name: "id",

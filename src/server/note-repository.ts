@@ -13,10 +13,10 @@ type NoteRow = {
 };
 
 export interface NoteRepository {
-  list(): Promise<Note[]>;
-  upsert(note: Note): Promise<Note>;
-  update(id: string, changes: NoteChanges): Promise<Note | null>;
-  delete(id: string): Promise<boolean>;
+  list(ownerId: string): Promise<Note[]>;
+  upsert(ownerId: string, note: Note): Promise<Note | null>;
+  update(ownerId: string, id: string, changes: NoteChanges): Promise<Note | null>;
+  delete(ownerId: string, id: string): Promise<boolean>;
 }
 
 function fromRow(row: NoteRow): Note {
@@ -32,45 +32,47 @@ function fromRow(row: NoteRow): Note {
 export class PostgresNoteRepository implements NoteRepository {
   constructor(private readonly database: Database, private readonly ensureSchema: () => Promise<void>) {}
 
-  async list() {
+  async list(ownerId: string) {
     await this.ensureSchema();
     const result = await this.database.query<NoteRow>(
-      "SELECT id, title, body, color, updated_at FROM notes ORDER BY updated_at DESC",
+      "SELECT id, title, body, color, updated_at FROM notes WHERE owner_id = $1 ORDER BY updated_at DESC, id DESC",
+      [ownerId],
     );
     return result.rows.map(fromRow);
   }
 
-  async upsert(note: Note) {
+  async upsert(ownerId: string, note: Note) {
     await this.ensureSchema();
     const result = await this.database.query<NoteRow>(
-      `INSERT INTO notes (id, title, body, color, updated_at)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO notes (id, owner_id, title, body, color, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (id) DO UPDATE
        SET title = EXCLUDED.title,
            body = EXCLUDED.body,
            color = EXCLUDED.color,
            updated_at = EXCLUDED.updated_at
+       WHERE notes.owner_id = $2
        RETURNING id, title, body, color, updated_at`,
-      [note.id, note.title, note.body, note.color, new Date(note.updatedAt)],
-    );
-    return fromRow(result.rows[0]);
-  }
-
-  async update(id: string, changes: NoteChanges) {
-    await this.ensureSchema();
-    const result = await this.database.query<NoteRow>(
-      `UPDATE notes
-       SET title = $2, body = $3, color = $4, updated_at = NOW()
-       WHERE id = $1
-       RETURNING id, title, body, color, updated_at`,
-      [id, changes.title, changes.body, changes.color],
+      [note.id, ownerId, note.title, note.body, note.color, new Date(note.updatedAt)],
     );
     return result.rows[0] ? fromRow(result.rows[0]) : null;
   }
 
-  async delete(id: string) {
+  async update(ownerId: string, id: string, changes: NoteChanges) {
     await this.ensureSchema();
-    const result = await this.database.query("DELETE FROM notes WHERE id = $1", [id]);
+    const result = await this.database.query<NoteRow>(
+      `UPDATE notes
+       SET title = $2, body = $3, color = $4, updated_at = NOW()
+       WHERE id = $1 AND owner_id = $2
+       RETURNING id, title, body, color, updated_at`,
+      [id, ownerId, changes.title, changes.body, changes.color],
+    );
+    return result.rows[0] ? fromRow(result.rows[0]) : null;
+  }
+
+  async delete(ownerId: string, id: string) {
+    await this.ensureSchema();
+    const result = await this.database.query("DELETE FROM notes WHERE id = $1 AND owner_id = $2", [id, ownerId]);
     return result.rowCount === 1;
   }
 }

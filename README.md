@@ -14,6 +14,12 @@ npm run dev
 
 The configured PostgreSQL database must be available before starting the application. The app initializes its `notes` table automatically.
 
+## Authentication and note ownership
+
+Every notes endpoint requires an `Authorization: Bearer <token>` header. Configure the deployment with the `PAPIER_AUTH_TOKENS` environment variable, a JSON object whose keys are bearer tokens and whose values are stable owner IDs. Keep tokens in the deployment's secret manager; never commit them.
+
+Notes are always scoped to the owner ID authenticated by that token. Existing rows without an owner are upgraded to the `legacy` owner. To retain access to them, provision a token mapped to `legacy`; otherwise they remain inaccessible rather than being exposed to another user. The database creates an `(owner_id, updated_at DESC, id DESC)` index for owner-scoped lists.
+
 ## Hosted preview
 
 For a hosted or reverse-proxied preview, use the production preview command:

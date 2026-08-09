@@ -25,6 +25,7 @@ export function ensureNotesSchema() {
       .query(`
         CREATE TABLE IF NOT EXISTS notes (
           id UUID PRIMARY KEY,
+          owner_id TEXT NOT NULL DEFAULT 'legacy',
           title TEXT NOT NULL DEFAULT '',
           body TEXT NOT NULL DEFAULT '',
           color TEXT NOT NULL DEFAULT 'coral'
@@ -32,6 +33,16 @@ export function ensureNotesSchema() {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `)
+      .then(() =>
+        db.query(`
+          ALTER TABLE notes ADD COLUMN IF NOT EXISTS owner_id TEXT;
+          UPDATE notes SET owner_id = 'legacy' WHERE owner_id IS NULL;
+          ALTER TABLE notes ALTER COLUMN owner_id SET DEFAULT 'legacy';
+          ALTER TABLE notes ALTER COLUMN owner_id SET NOT NULL;
+          CREATE INDEX IF NOT EXISTS notes_owner_updated_at_idx
+            ON notes (owner_id, updated_at DESC, id DESC)
+        `),
+      )
       .then(() => undefined)
       .catch((error) => {
         globalForDatabase.papierSchema = undefined;

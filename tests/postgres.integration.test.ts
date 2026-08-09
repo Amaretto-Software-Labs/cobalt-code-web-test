@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { afterAll, describe, expect, it } from "vitest";
-import { PostgresNoteRepository } from "@/server/note-repository";
 
 const connectionString = process.env.DATABASE_URL;
-const describeWithDatabase = connectionString ? describe : describe.skip;
 
-describeWithDatabase("PostgresNoteRepository integration", () => {
+if (connectionString) {
+  const { PostgresNoteRepository } = await import("@/server/note-repository");
+
+  describe("PostgresNoteRepository integration", () => {
   const pool = new Pool({ connectionString });
   const repository = new PostgresNoteRepository(pool, async () => undefined);
   const id = randomUUID();
@@ -17,7 +18,8 @@ describeWithDatabase("PostgresNoteRepository integration", () => {
   });
 
   it("covers the full note lifecycle against PostgreSQL", async () => {
-    const created = await repository.upsert({
+    const ownerId = `integration-${id}`;
+    const created = await repository.upsert(ownerId, {
       id,
       title: "Integration note",
       body: "Created",
@@ -25,16 +27,35 @@ describeWithDatabase("PostgresNoteRepository integration", () => {
       updatedAt: 1_700_000_000_000,
     });
     expect(created).toMatchObject({ id, title: "Integration note", color: "gold" });
-    await expect(repository.list()).resolves.toContainEqual(created);
+    await expect(repository.list(ownerId)).resolves.toContainEqual(created);
 
-    const updated = await repository.update(id, {
+    const updated = await repository.update(ownerId, id, {
       title: "Updated integration note",
       body: "Updated",
       color: "sky",
     });
     expect(updated).toMatchObject({ id, title: "Updated integration note", color: "sky" });
 
-    await expect(repository.delete(id)).resolves.toBe(true);
-    await expect(repository.delete(id)).resolves.toBe(false);
+    await expect(repository.delete(ownerId, id)).resolves.toBe(true);
+    await expect(repository.delete(ownerId, id)).resolves.toBe(false);
   });
-});
+
+  it("does not expose another owner's note", async () => {
+    const ownerId = `owner-a-${id}`;
+    const otherOwnerId = `owner-b-${id}`;
+    await repository.upsert(ownerId, {
+      id,
+      title: "Private note",
+      body: "Only owner A can read this",
+      color: "coral",
+      updatedAt: 1_700_000_000_000,
+    });
+
+    await expect(repository.list(otherOwnerId)).resolves.toEqual([]);
+    await expect(repository.update(otherOwnerId, id, { title: "Changed", body: "Changed", color: "sky" })).resolves.toBeNull();
+    await expect(repository.delete(otherOwnerId, id)).resolves.toBe(false);
+  });
+  });
+} else {
+  describe.skip("PostgresNoteRepository integration", () => {});
+}
