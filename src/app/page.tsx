@@ -19,7 +19,10 @@ function relativeTime(timestamp: number) {
 }
 
 export default function NotesPage() {
-  const { notes, activeId, setActiveId, ready, saveStatus, create, update, remove } = useNotes();
+  const {
+    notes, activeId, setActiveId, ready, saveStatus, totalCount, hasMore, loadingMore, loadMoreError,
+    loadMore, create, update, remove,
+  } = useNotes();
   const [query, setQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -91,7 +94,7 @@ export default function NotesPage() {
 
         <div className="section-heading">
           <span>Notes</span>
-          <span>{filteredNotes.length}</span>
+          <span>{query.trim() ? filteredNotes.length : totalCount}</span>
         </div>
 
         <div className="note-list">
@@ -113,6 +116,12 @@ export default function NotesPage() {
 
           {ready && filteredNotes.length === 0 && query && (
             <p className="no-results">No notes match “{query}”</p>
+          )}
+
+          {ready && hasMore && (
+            <button className="load-more-button" onClick={() => void loadMore().catch(() => undefined)} disabled={loadingMore}>
+              {loadingMore ? "Loading…" : loadMoreError ? "Try loading again" : "Load more notes"}
+            </button>
           )}
         </div>
 

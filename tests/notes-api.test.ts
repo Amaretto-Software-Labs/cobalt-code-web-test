@@ -13,14 +13,26 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("notes API client", () => {
   it("loads and validates notes", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(Response.json([note]));
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({ items: [note], nextCursor: "next", totalCount: 12 }),
+    );
     vi.stubGlobal("fetch", fetchMock);
-    await expect(listNotes()).resolves.toEqual([note]);
+    await expect(listNotes()).resolves.toEqual({ items: [note], nextCursor: "next", totalCount: 12 });
     expect(fetchMock).toHaveBeenCalledWith("/api/notes", undefined);
   });
 
+  it("URL-encodes continuation cursors", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ items: [], nextCursor: null, totalCount: 0 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await listNotes("a/b+c=");
+    expect(fetchMock).toHaveBeenCalledWith("/api/notes?cursor=a%2Fb%2Bc%3D", undefined);
+  });
+
   it("rejects an invalid server payload", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json([{ bad: true }])));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(Response.json({ items: [{ bad: true }], nextCursor: null, totalCount: 1 })),
+    );
     await expect(listNotes()).rejects.toMatchObject({ name: "NotesApiError", status: 500 });
   });
 

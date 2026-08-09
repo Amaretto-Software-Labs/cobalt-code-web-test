@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ensureNotesSchema } from "@/lib/db";
 import { PostgresNoteRepository } from "@/server/note-repository";
 
 const connectionString = process.env.DATABASE_URL;
@@ -8,11 +9,29 @@ const describeWithDatabase = connectionString ? describe : describe.skip;
 
 describeWithDatabase("PostgresNoteRepository integration", () => {
   const pool = new Pool({ connectionString });
-  const repository = new PostgresNoteRepository(pool, async () => undefined);
+  const repository = new PostgresNoteRepository(pool, ensureNotesSchema);
   const id = randomUUID();
+  const paginationIds = [
+    "ffffffff-ffff-4fff-bfff-fffffffffff1",
+    "ffffffff-ffff-4fff-bfff-fffffffffff2",
+    "ffffffff-ffff-4fff-bfff-fffffffffff3",
+  ];
+  const precisionIds = [
+    "eeeeeeee-eeee-4eee-beee-eeeeeeeeeee1",
+    "eeeeeeee-eeee-4eee-beee-eeeeeeeeeee2",
+    "eeeeeeee-eeee-4eee-beee-eeeeeeeeeee3",
+  ];
+
+  beforeAll(async () => {
+    await ensureNotesSchema();
+  });
 
   afterAll(async () => {
-    await pool.query("DELETE FROM notes WHERE id = $1", [id]);
+    await pool.query("DELETE FROM notes WHERE id = $1 OR id = ANY($2::uuid[]) OR id = ANY($3::uuid[])", [
+      id,
+      paginationIds,
+      precisionIds,
+    ]);
     await pool.end();
   });
 
@@ -25,7 +44,9 @@ describeWithDatabase("PostgresNoteRepository integration", () => {
       updatedAt: 1_700_000_000_000,
     });
     expect(created).toMatchObject({ id, title: "Integration note", color: "gold" });
-    await expect(repository.list()).resolves.toContainEqual(created);
+    await expect(repository.list({ limit: 100, cursor: null })).resolves.toMatchObject({
+      items: expect.arrayContaining([created]),
+    });
 
     const updated = await repository.update(id, {
       title: "Updated integration note",
@@ -36,5 +57,76 @@ describeWithDatabase("PostgresNoteRepository integration", () => {
 
     await expect(repository.delete(id)).resolves.toBe(true);
     await expect(repository.delete(id)).resolves.toBe(false);
+  });
+
+  it("paginates equal timestamps with the UUID as a stable descending tie-breaker", async () => {
+    const updatedAt = 253_402_300_799_000;
+    for (const [position, noteId] of paginationIds.entries()) {
+      await repository.upsert({
+        id: noteId,
+        title: `Pagination ${position}`,
+        body: "Stable ordering",
+        color: "lilac",
+        updatedAt,
+      });
+    }
+
+    const first = await repository.list({ limit: 2, cursor: null });
+    expect(first.totalCount).toBeGreaterThanOrEqual(3);
+    expect(first.items.map((note) => note.id)).toEqual([paginationIds[2], paginationIds[1]]);
+    expect(first.nextCursor).toEqual({
+      id: paginationIds[1],
+      updatedAt: "9999-12-31T23:59:59.000000Z",
+    });
+
+    const second = await repository.list({ limit: 2, cursor: first.nextCursor });
+    expect(second.totalCount).toBe(first.totalCount);
+    expect(second.items[0].id).toBe(paginationIds[0]);
+    const loadedIds = [...first.items, ...second.items].map((note) => note.id);
+    expect(loadedIds.filter((noteId) => paginationIds.includes(noteId))).toEqual([
+      paginationIds[2],
+      paginationIds[1],
+      paginationIds[0],
+    ]);
+    expect(new Set(loadedIds).size).toBe(loadedIds.length);
+    await pool.query("DELETE FROM notes WHERE id = ANY($1::uuid[])", [paginationIds]);
+  });
+
+  it("retains database microseconds in cursors so adjacent rows are not skipped", async () => {
+    await pool.query(
+      `INSERT INTO notes (id, title, body, color, updated_at)
+       VALUES ($1, 'Precision 1', '', 'sage', '9999-12-30T00:00:00.123900Z'),
+              ($2, 'Precision 2', '', 'sage', '9999-12-30T00:00:00.123800Z'),
+              ($3, 'Precision 3', '', 'sage', '9999-12-30T00:00:00.123700Z')`,
+      precisionIds,
+    );
+
+    const first = await repository.list({ limit: 1, cursor: null });
+    const second = await repository.list({ limit: 1, cursor: first.nextCursor });
+    const third = await repository.list({ limit: 1, cursor: second.nextCursor });
+
+    expect([first.items[0].id, second.items[0].id, third.items[0].id]).toEqual(precisionIds);
+    expect(first.items[0].updatedAt).toBe(second.items[0].updatedAt);
+    expect(first.nextCursor?.updatedAt).toBe("9999-12-30T00:00:00.123900Z");
+  });
+
+  it("provides an index PostgreSQL can use for the listing order", async () => {
+    const index = await pool.query<{ indexdef: string }>(
+      "SELECT indexdef FROM pg_indexes WHERE tablename = 'notes' AND indexname = 'notes_updated_at_id_idx'",
+    );
+    expect(index.rows[0]?.indexdef).toContain("(updated_at DESC, id DESC)");
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SET LOCAL enable_seqscan = off");
+      const plan = await client.query<{ "QUERY PLAN": string }>(
+        "EXPLAIN SELECT id, title, body, color, updated_at FROM notes ORDER BY updated_at DESC, id DESC LIMIT 20",
+      );
+      expect(plan.rows.map((row) => row["QUERY PLAN"]).join("\n")).toContain("notes_updated_at_id_idx");
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
   });
 });

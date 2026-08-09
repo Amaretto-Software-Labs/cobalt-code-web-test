@@ -19,6 +19,17 @@ export type Note = {
 
 export type NoteChanges = Pick<Note, "title" | "body" | "color">;
 
+export type NotesPage = {
+  items: Note[];
+  nextCursor: string | null;
+  totalCount: number;
+};
+
+export const NOTE_PAGE_SIZE = {
+  default: 10,
+  maximum: 100,
+} as const;
+
 export const NOTE_LIMITS = {
   title: 500,
   body: 100_000,
@@ -83,6 +94,24 @@ export function parseNotes(value: unknown): Note[] | null {
   if (!Array.isArray(value)) return null;
   const notes = value.map(parseNote);
   return notes.every((note): note is Note => note !== null) ? notes : null;
+}
+
+export function parseNotesPage(value: unknown): NotesPage | null {
+  if (!value || typeof value !== "object") return null;
+  const page = value as Record<string, unknown>;
+  const items = parseNotes(page.items);
+
+  if (
+    !items ||
+    items.length > NOTE_PAGE_SIZE.maximum ||
+    typeof page.totalCount !== "number" ||
+    !Number.isSafeInteger(page.totalCount) ||
+    page.totalCount < items.length ||
+    (page.nextCursor !== null && typeof page.nextCursor !== "string")
+  ) {
+    return null;
+  }
+  return { items, nextCursor: page.nextCursor, totalCount: page.totalCount };
 }
 
 export function parseLegacyNotes(value: string): Note[] {
