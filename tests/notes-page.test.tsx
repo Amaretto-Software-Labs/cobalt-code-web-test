@@ -25,6 +25,8 @@ vi.mock("@/hooks/use-notes", () => ({
     setActiveId: vi.fn(),
     ready: true,
     saveStatus: "saved",
+    authenticationRequired: false,
+    authenticate: vi.fn(),
     create: vi.fn(),
     update,
     remove: vi.fn(),

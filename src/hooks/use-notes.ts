@@ -18,6 +18,8 @@ export function useNotes() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("loading");
+  const [authenticationRequired, setAuthenticationRequired] = useState(false);
+  const [authRevision, setAuthRevision] = useState(0);
   const [canRetry, setCanRetry] = useState(false);
   const notesRef = useRef<Note[]>([]);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -104,12 +106,14 @@ export function useNotes() {
           setActiveId(databaseNotes[0]?.id ?? null);
           readyRef.current = true;
           loadFailed.current = false;
+          setAuthenticationRequired(false);
           refreshPersistence();
         }
-      } catch {
+      } catch (error) {
         if (!cancelled) {
           readyRef.current = true;
           loadFailed.current = true;
+          setAuthenticationRequired(error instanceof notesApi.NotesApiError && error.status === 401);
           refreshPersistence();
         }
       } finally {
@@ -121,7 +125,7 @@ export function useNotes() {
       for (const note of pendingNotes.current.values()) {
         void fetch(`/api/notes/${note.id}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: notesApi.authorizationHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify(note),
           keepalive: true,
         });
@@ -137,7 +141,19 @@ export function useNotes() {
       flushPendingNotes();
       activeTimers.forEach(clearTimeout);
     };
-  }, []);
+  }, [authRevision]);
+
+  function authenticate(token: string) {
+    const normalized = token.trim();
+    if (!normalized) return;
+    notesApi.setAuthToken(normalized);
+    readyRef.current = false;
+    loadFailed.current = false;
+    setAuthenticationRequired(false);
+    setReady(false);
+    setSaveStatus("loading");
+    setAuthRevision((revision) => revision + 1);
+  }
 
   async function loadMore() {
     if (!nextCursor || loadingMoreRef.current) return;
@@ -268,6 +284,8 @@ export function useNotes() {
     setActiveId,
     ready,
     saveStatus,
+    authenticationRequired,
+    authenticate,
     canRetry,
     totalCount,
     hasMore: nextCursor !== null,

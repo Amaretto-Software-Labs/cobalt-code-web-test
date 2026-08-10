@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { NOTE_PAGE_SIZE, isUuid, parseCreateNoteInput } from "@/domain/note";
+import { authenticatedOwner } from "@/server/auth";
 import { noteRepository, type NoteListCursor } from "@/server/note-repository";
 
 async function readJson(request: Request): Promise<unknown> {
@@ -35,7 +36,14 @@ function encodeCursor(cursor: NoteListCursor | null) {
   return cursor ? Buffer.from(JSON.stringify(cursor)).toString("base64url") : null;
 }
 
+function requireOwner(request: Request): string | NextResponse {
+  const owner = authenticatedOwner(request);
+  return owner ?? NextResponse.json({ error: "Authentication required" }, { status: 401 });
+}
+
 export async function GET(request: Request) {
+  const owner = requireOwner(request);
+  if (owner instanceof NextResponse) return owner;
   const params = new URL(request.url).searchParams;
   const limitValue = params.get("limit");
   const limit = limitValue === null ? NOTE_PAGE_SIZE.default : Number(limitValue);
@@ -52,7 +60,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
   }
 
-  const page = await noteRepository.list({ limit, cursor });
+  const page = await noteRepository.list(owner, { limit, cursor });
   return NextResponse.json({
     items: page.items,
     nextCursor: encodeCursor(page.nextCursor),
@@ -61,7 +69,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const owner = requireOwner(request);
+  if (owner instanceof NextResponse) return owner;
   const input = parseCreateNoteInput(await readJson(request));
   if (!input) return NextResponse.json({ error: "Invalid note" }, { status: 400 });
-  return NextResponse.json(await noteRepository.create(input), { status: 201 });
+  return NextResponse.json(await noteRepository.create(owner, input), { status: 201 });
 }

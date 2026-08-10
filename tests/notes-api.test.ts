@@ -14,6 +14,21 @@ const createInput = { title: note.title, body: note.body, color: note.color };
 afterEach(() => vi.unstubAllGlobals());
 
 describe("notes API client", () => {
+  it("adds a stored bearer token to requests", async () => {
+    vi.stubGlobal("window", {
+      localStorage: { getItem: vi.fn().mockReturnValue("alice-token") },
+    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({ items: [], nextCursor: null, totalCount: 0 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listNotes();
+
+    const headers = fetchMock.mock.calls[0][1]?.headers as Headers;
+    expect(headers.get("Authorization")).toBe("Bearer alice-token");
+  });
+
   it("loads and validates notes", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       Response.json({ items: [note], nextCursor: "next", totalCount: 12 }),

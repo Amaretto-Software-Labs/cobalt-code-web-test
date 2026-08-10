@@ -18,10 +18,10 @@ type ListedNoteRow = NoteRow & {
 };
 
 export interface NoteRepository {
-  list(options: NoteListOptions): Promise<NoteListPage>;
-  create(input: CreateNoteInput): Promise<Note>;
-  update(id: string, changes: NoteChanges): Promise<Note | null>;
-  delete(id: string): Promise<boolean>;
+  list(ownerId: string, options: NoteListOptions): Promise<NoteListPage>;
+  create(ownerId: string, input: CreateNoteInput): Promise<Note>;
+  update(ownerId: string, id: string, changes: NoteChanges): Promise<Note | null>;
+  delete(ownerId: string, id: string): Promise<boolean>;
 }
 
 export type NoteListCursor = {
@@ -53,11 +53,11 @@ function fromRow(row: NoteRow): Note {
 export class PostgresNoteRepository implements NoteRepository {
   constructor(private readonly database: Database) {}
 
-  async list({ limit, cursor }: NoteListOptions) {
-    const values: unknown[] = [];
+  async list(ownerId: string, { limit, cursor }: NoteListOptions) {
+    const values: unknown[] = [ownerId];
     const where = cursor
-      ? "WHERE (updated_at, id) < ($1::timestamptz, $2::uuid)"
-      : "";
+      ? "WHERE owner_id = $1 AND (updated_at, id) < ($2::timestamptz, $3::uuid)"
+      : "WHERE owner_id = $1";
     if (cursor) values.push(cursor.updatedAt, cursor.id);
     values.push(limit + 1);
     const [result, countResult] = await Promise.all([
@@ -70,7 +70,10 @@ export class PostgresNoteRepository implements NoteRepository {
          LIMIT $${values.length}`,
         values,
       ),
-      this.database.query<{ total_count: string }>("SELECT COUNT(*) AS total_count FROM notes"),
+      this.database.query<{ total_count: string }>(
+        "SELECT COUNT(*) AS total_count FROM notes WHERE owner_id = $1",
+        [ownerId],
+      ),
     ]);
     const hasMore = result.rows.length > limit;
     const items = result.rows.slice(0, limit).map(fromRow);
@@ -82,29 +85,29 @@ export class PostgresNoteRepository implements NoteRepository {
     };
   }
 
-  async create(input: CreateNoteInput) {
+  async create(ownerId: string, input: CreateNoteInput) {
     const result = await this.database.query<NoteRow>(
-      `INSERT INTO notes (id, title, body, color, updated_at)
-       VALUES ($1, $2, $3, $4, NOW())
+      `INSERT INTO notes (id, owner_id, title, body, color, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
        RETURNING id, title, body, color, updated_at`,
-      [randomUUID(), input.title, input.body, input.color],
+      [randomUUID(), ownerId, input.title, input.body, input.color],
     );
     return fromRow(result.rows[0]);
   }
 
-  async update(id: string, changes: NoteChanges) {
+  async update(ownerId: string, id: string, changes: NoteChanges) {
     const result = await this.database.query<NoteRow>(
       `UPDATE notes
-       SET title = $2, body = $3, color = $4, updated_at = NOW()
-       WHERE id = $1
+       SET title = $3, body = $4, color = $5, updated_at = NOW()
+       WHERE id = $1 AND owner_id = $2
        RETURNING id, title, body, color, updated_at`,
-      [id, changes.title, changes.body, changes.color],
+      [id, ownerId, changes.title, changes.body, changes.color],
     );
     return result.rows[0] ? fromRow(result.rows[0]) : null;
   }
 
-  async delete(id: string) {
-    const result = await this.database.query("DELETE FROM notes WHERE id = $1", [id]);
+  async delete(ownerId: string, id: string) {
+    const result = await this.database.query("DELETE FROM notes WHERE id = $1 AND owner_id = $2", [id, ownerId]);
     return result.rowCount === 1;
   }
 }

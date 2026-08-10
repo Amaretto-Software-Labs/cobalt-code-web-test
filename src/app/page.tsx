@@ -22,12 +22,13 @@ function relativeTime(timestamp: number) {
 export default function NotesPage() {
   const {
     notes, activeId, setActiveId, ready, saveStatus, totalCount, hasMore, loadingMore, loadMoreError,
-    loadMore, canRetry, create, update, retryFailed, remove,
+    loadMore, canRetry, authenticationRequired, authenticate, create, update, retryFailed, remove,
   } = useNotes();
   const { theme, toggleTheme } = useTheme();
   const [query, setQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [authToken, setAuthToken] = useState("");
 
   useEffect(() => {
     if (!confirmingDelete) return;
@@ -163,7 +164,30 @@ export default function NotesPage() {
           </div>
         </header>
 
-        {!ready ? (
+        {authenticationRequired ? (
+          <form
+            className="auth-panel"
+            onSubmit={(event) => {
+              event.preventDefault();
+              authenticate(authToken);
+            }}
+          >
+            <FileText size={28} aria-hidden="true" />
+            <h1>Unlock your notes</h1>
+            <p>Enter the bearer token provided by your Papier administrator.</p>
+            <label htmlFor="auth-token">Access token</label>
+            <input
+              id="auth-token"
+              type="password"
+              value={authToken}
+              onChange={(event) => setAuthToken(event.target.value)}
+              autoComplete="current-password"
+              required
+              autoFocus
+            />
+            <button type="submit">Continue</button>
+          </form>
+        ) : !ready ? (
           <div className="loading-state">Loading your notes…</div>
         ) : activeNote ? (
           <article className="editor">

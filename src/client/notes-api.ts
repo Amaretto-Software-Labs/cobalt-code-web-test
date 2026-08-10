@@ -14,8 +14,43 @@ export class NotesApiError extends Error {
   }
 }
 
+export const AUTH_TOKEN_STORAGE_KEY = "papier-auth-token";
+let inMemoryAuthToken: string | null = null;
+
+function storedAuthToken() {
+  if (inMemoryAuthToken) return inMemoryAuthToken;
+  try {
+    return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthToken(token: string) {
+  inMemoryAuthToken = token;
+  try {
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+  } catch {
+    // Keep the token for this tab when browser storage is unavailable.
+  }
+}
+
+export function authorizationHeaders(initial?: HeadersInit) {
+  const headers = new Headers(initial);
+  const token = typeof window === "undefined" ? null : storedAuthToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  return headers;
+}
+
 async function requestJson(url: string, init?: RequestInit): Promise<unknown> {
-  const response = await fetch(url, init);
+  const token = typeof window === "undefined" ? null : storedAuthToken();
+  let requestInit = init;
+  if (token) {
+    const headers = new Headers(init?.headers);
+    headers.set("Authorization", `Bearer ${token}`);
+    requestInit = { ...init, headers };
+  }
+  const response = await fetch(url, requestInit);
   if (!response.ok) throw new NotesApiError(`Notes request failed (${response.status})`, response.status);
   if (response.status === 204) return null;
   return response.json();

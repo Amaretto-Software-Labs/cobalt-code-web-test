@@ -35,7 +35,7 @@ async function waitForServer(origin: string, process: ChildProcess) {
     if (process.exitCode !== null) throw new Error(`Next.js server exited with code ${process.exitCode}`);
     try {
       const response = await fetch(`${origin}/api/notes`);
-      if (response.ok) return;
+      if (response.status < 500) return;
     } catch {
       // The server is still starting.
     }
@@ -54,7 +54,11 @@ describeWithDatabase("notes HTTP integration", () => {
   beforeAll(async () => {
     await adminPool.query(`CREATE SCHEMA ${schemaName}`);
     const scopedDatabaseUrl = databaseUrlForSchema(databaseUrl!);
-    const databaseEnvironment = { ...process.env, DATABASE_URL: scopedDatabaseUrl };
+    const databaseEnvironment = {
+      ...process.env,
+      DATABASE_URL: scopedDatabaseUrl,
+      PAPIER_AUTH_TOKENS: JSON.stringify({ "alice-token": "alice", "bob-token": "bob" }),
+    };
     await execFileAsync(process.execPath, ["scripts/migrate.mjs"], {
       cwd: process.cwd(),
       env: databaseEnvironment,
@@ -87,7 +91,9 @@ describeWithDatabase("notes HTTP integration", () => {
   });
 
   async function request(path: string, init?: RequestInit) {
-    return fetch(`${origin}${path}`, init);
+    const headers = new Headers(init?.headers);
+    if (!headers.has("Authorization")) headers.set("Authorization", "Bearer alice-token");
+    return fetch(`${origin}${path}`, { ...init, headers });
   }
 
   async function json(response: Response) {
@@ -102,6 +108,12 @@ describeWithDatabase("notes HTTP integration", () => {
     await expect(
       adminPool.query("SELECT to_regclass($1) IS NOT NULL AS exists", [`${schemaName}.notes`]),
     ).resolves.toMatchObject({ rows: [{ exists: true }] });
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const response = await fetch(`${origin}/api/notes`);
+    expect(response.status).toBe(401);
+    expect(await json(response)).toEqual({ error: "Authentication required" });
   });
 
   it("validates malformed and invalid create requests", async () => {

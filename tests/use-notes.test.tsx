@@ -5,10 +5,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Note } from "@/domain/note";
 
 const api = vi.hoisted(() => ({
+  NotesApiError: class NotesApiError extends Error {
+    constructor(message: string, public readonly status: number) { super(message); }
+  },
   listNotes: vi.fn(),
   createNote: vi.fn(),
   updateNote: vi.fn(),
   deleteNote: vi.fn(),
+  setAuthToken: vi.fn(),
+  authorizationHeaders: vi.fn((headers: HeadersInit) => new Headers(headers)),
 }));
 
 vi.mock("@/client/notes-api", () => api);
@@ -52,6 +57,21 @@ beforeEach(() => {
 });
 
 describe("useNotes persistence orchestration", () => {
+  it("accepts a bearer token and retries an unauthorized initial load", async () => {
+    api.listNotes
+      .mockRejectedValueOnce(new api.NotesApiError("Unauthorized", 401))
+      .mockResolvedValueOnce({ items: [existingNote], nextCursor: null, totalCount: 1 });
+    const { result } = renderHook(() => useNotes());
+    await waitFor(() => expect(result.current.authenticationRequired).toBe(true));
+
+    act(() => result.current.authenticate(" alice-token "));
+
+    expect(api.setAuthToken).toHaveBeenCalledWith("alice-token");
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.authenticationRequired).toBe(false);
+    expect(result.current.notes).toEqual([existingNote]);
+  });
+
   it("loads notes from the API and selects the first note", async () => {
     api.listNotes.mockResolvedValue({ items: [existingNote], nextCursor: null, totalCount: 12 });
     const { result } = renderHook(() => useNotes());

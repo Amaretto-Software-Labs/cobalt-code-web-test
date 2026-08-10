@@ -18,6 +18,14 @@ The configured PostgreSQL database must be available before starting the applica
 
 The database data is stored in the `postgres-data` volume. To discard local data deliberately, stop the stack and remove that named volume; migrations do not include automatic rollback. Rollbacks should be handled with a new forward migration that restores the required schema or data.
 
+## Authentication and note ownership
+
+Every notes endpoint requires an `Authorization: Bearer <token>` header. Configure the deployment with the `PAPIER_AUTH_TOKENS` environment variable, a JSON object whose keys are bearer tokens and whose values are stable owner IDs. Keep tokens in the deployment's secret manager; never commit them.
+
+The browser app asks for this token when authentication is required and stores it in that browser's local storage so subsequent API requests include the Bearer header. Use a separate revocable token per user or device.
+
+Notes are always scoped to the owner ID authenticated by that token. Existing rows without an owner are upgraded to the `legacy` owner. To retain access to them, provision a token mapped to `legacy`; otherwise they remain inaccessible rather than being exposed to another user. The database creates an `(owner_id, updated_at DESC, id DESC)` index for owner-scoped lists.
+
 ## Hosted preview
 
 For a hosted or reverse-proxied preview, use the production preview command:

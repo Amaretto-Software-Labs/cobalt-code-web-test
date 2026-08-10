@@ -14,6 +14,8 @@ describeWithDatabase("PostgresNoteRepository integration", () => {
   const schema = `papier_test_${randomUUID().replaceAll("-", "")}`;
   let client!: PoolClient;
   let repository!: PostgresNoteRepository;
+  const ownerId = `owner-${randomUUID()}`;
+  const otherOwnerId = `owner-${randomUUID()}`;
   const paginationIds = [
     "ffffffff-ffff-4fff-bfff-fffffffffff1",
     "ffffffff-ffff-4fff-bfff-fffffffffff2",
@@ -51,41 +53,61 @@ describeWithDatabase("PostgresNoteRepository integration", () => {
     const result = await client.query<{ version: string }>(
       "SELECT version FROM schema_migrations ORDER BY version",
     );
-    expect(result.rows).toEqual([{ version: "001_create_notes.sql" }]);
+    expect(result.rows).toEqual([
+      { version: "001_create_notes.sql" },
+      { version: "002_add_note_owners.sql" },
+    ]);
   });
 
   it("covers the full note lifecycle against PostgreSQL", async () => {
-    const created = await repository.create({
+    const created = await repository.create(ownerId, {
       title: "Integration note",
       body: "Created",
       color: "gold",
     });
     expect(created).toMatchObject({ title: "Integration note", color: "gold" });
-    await expect(repository.list({ limit: 100, cursor: null })).resolves.toMatchObject({
+    await expect(repository.list(ownerId, { limit: 100, cursor: null })).resolves.toMatchObject({
       items: expect.arrayContaining([created]),
     });
 
-    const updated = await repository.update(created.id, {
+    const updated = await repository.update(ownerId, created.id, {
       title: "Updated integration note",
       body: "Updated",
       color: "sky",
     });
     expect(updated).toMatchObject({ id: created.id, title: "Updated integration note", color: "sky" });
 
-    await expect(repository.delete(created.id)).resolves.toBe(true);
-    await expect(repository.delete(created.id)).resolves.toBe(false);
+    await expect(repository.delete(ownerId, created.id)).resolves.toBe(true);
+    await expect(repository.delete(ownerId, created.id)).resolves.toBe(false);
+  });
+
+  it("does not expose another owner's note", async () => {
+    const created = await repository.create(ownerId, {
+      title: "Private note",
+      body: "Only the owner can read this",
+      color: "coral",
+    });
+
+    await expect(repository.list(otherOwnerId, { limit: 100, cursor: null })).resolves.toMatchObject({ items: [] });
+    await expect(repository.update(otherOwnerId, created.id, {
+      title: "Changed",
+      body: "Changed",
+      color: "sky",
+    })).resolves.toBeNull();
+    await expect(repository.delete(otherOwnerId, created.id)).resolves.toBe(false);
+    await expect(repository.delete(ownerId, created.id)).resolves.toBe(true);
   });
 
   it("paginates equal timestamps with the UUID as a stable descending tie-breaker", async () => {
     await client.query(
-      `INSERT INTO notes (id, title, body, color, updated_at)
-       VALUES ($1, 'Pagination 0', 'Stable ordering', 'lilac', '9999-12-31T23:59:59Z'),
-              ($2, 'Pagination 1', 'Stable ordering', 'lilac', '9999-12-31T23:59:59Z'),
-              ($3, 'Pagination 2', 'Stable ordering', 'lilac', '9999-12-31T23:59:59Z')`,
-      paginationIds,
+      `INSERT INTO notes (id, owner_id, title, body, color, updated_at)
+       VALUES ($1, $4, 'Pagination 0', 'Stable ordering', 'lilac', '9999-12-31T23:59:59Z'),
+              ($2, $4, 'Pagination 1', 'Stable ordering', 'lilac', '9999-12-31T23:59:59Z'),
+              ($3, $4, 'Pagination 2', 'Stable ordering', 'lilac', '9999-12-31T23:59:59Z')`,
+      [...paginationIds, ownerId],
     );
 
-    const first = await repository.list({ limit: 2, cursor: null });
+    const first = await repository.list(ownerId, { limit: 2, cursor: null });
     expect(first.totalCount).toBeGreaterThanOrEqual(3);
     expect(first.items.map((note) => note.id)).toEqual([paginationIds[2], paginationIds[1]]);
     expect(first.nextCursor).toEqual({
@@ -93,7 +115,7 @@ describeWithDatabase("PostgresNoteRepository integration", () => {
       updatedAt: "9999-12-31T23:59:59.000000Z",
     });
 
-    const second = await repository.list({ limit: 2, cursor: first.nextCursor });
+    const second = await repository.list(ownerId, { limit: 2, cursor: first.nextCursor });
     expect(second.totalCount).toBe(first.totalCount);
     expect(second.items[0].id).toBe(paginationIds[0]);
     const loadedIds = [...first.items, ...second.items].map((note) => note.id);
@@ -108,16 +130,16 @@ describeWithDatabase("PostgresNoteRepository integration", () => {
 
   it("retains database microseconds in cursors so adjacent rows are not skipped", async () => {
     await client.query(
-      `INSERT INTO notes (id, title, body, color, updated_at)
-       VALUES ($1, 'Precision 1', '', 'sage', '9999-12-30T00:00:00.123900Z'),
-              ($2, 'Precision 2', '', 'sage', '9999-12-30T00:00:00.123800Z'),
-              ($3, 'Precision 3', '', 'sage', '9999-12-30T00:00:00.123700Z')`,
-      precisionIds,
+      `INSERT INTO notes (id, owner_id, title, body, color, updated_at)
+       VALUES ($1, $4, 'Precision 1', '', 'sage', '9999-12-30T00:00:00.123900Z'),
+              ($2, $4, 'Precision 2', '', 'sage', '9999-12-30T00:00:00.123800Z'),
+              ($3, $4, 'Precision 3', '', 'sage', '9999-12-30T00:00:00.123700Z')`,
+      [...precisionIds, ownerId],
     );
 
-    const first = await repository.list({ limit: 1, cursor: null });
-    const second = await repository.list({ limit: 1, cursor: first.nextCursor });
-    const third = await repository.list({ limit: 1, cursor: second.nextCursor });
+    const first = await repository.list(ownerId, { limit: 1, cursor: null });
+    const second = await repository.list(ownerId, { limit: 1, cursor: first.nextCursor });
+    const third = await repository.list(ownerId, { limit: 1, cursor: second.nextCursor });
 
     expect([first.items[0].id, second.items[0].id, third.items[0].id]).toEqual(precisionIds);
     expect(first.items[0].updatedAt).toBe(second.items[0].updatedAt);
@@ -126,18 +148,19 @@ describeWithDatabase("PostgresNoteRepository integration", () => {
 
   it("provides an index PostgreSQL can use for the listing order", async () => {
     const index = await client.query<{ indexdef: string }>(
-      "SELECT indexdef FROM pg_indexes WHERE schemaname = $1 AND tablename = 'notes' AND indexname = 'notes_updated_at_id_idx'",
+      "SELECT indexdef FROM pg_indexes WHERE schemaname = $1 AND tablename = 'notes' AND indexname = 'notes_owner_updated_at_id_idx'",
       [schema],
     );
-    expect(index.rows[0]?.indexdef).toContain("(updated_at DESC, id DESC)");
+    expect(index.rows[0]?.indexdef).toContain("(owner_id, updated_at DESC, id DESC)");
 
     try {
       await client.query("BEGIN");
       await client.query("SET LOCAL enable_seqscan = off");
       const plan = await client.query<{ "QUERY PLAN": string }>(
-        "EXPLAIN SELECT id, title, body, color, updated_at FROM notes ORDER BY updated_at DESC, id DESC LIMIT 20",
+        "EXPLAIN SELECT id, title, body, color, updated_at FROM notes WHERE owner_id = $1 ORDER BY updated_at DESC, id DESC LIMIT 20",
+        [ownerId],
       );
-      expect(plan.rows.map((row) => row["QUERY PLAN"]).join("\n")).toContain("notes_updated_at_id_idx");
+      expect(plan.rows.map((row) => row["QUERY PLAN"]).join("\n")).toContain("notes_owner_updated_at_id_idx");
     } finally {
       await client.query("ROLLBACK");
     }
