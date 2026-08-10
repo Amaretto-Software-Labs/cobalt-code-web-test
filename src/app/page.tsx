@@ -191,8 +191,16 @@ export default function NotesPage() {
                 onChange={(event) => updateNote({ body: event.target.value })}
                 placeholder="Start writing…"
                 aria-label="Note body"
+                aria-describedby="body-character-count"
                 autoFocus
               />
+              <output
+                id="body-character-count"
+                className="character-count"
+                aria-live="polite"
+              >
+                {activeNote.body.length.toLocaleString("en")} {activeNote.body.length === 1 ? "character" : "characters"}
+              </output>
             </div>
           </article>
         ) : (
