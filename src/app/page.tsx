@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, FileText, Menu, Palette, Plus, Search, Trash2, X } from "lucide-react";
+import { AlertTriangle, FileText, Menu, Moon, Palette, Plus, Search, Sun, Trash2, X } from "lucide-react";
 import { NOTE_COLORS, type Note } from "@/domain/note";
 import { useNotes } from "@/hooks/use-notes";
+import { useTheme } from "@/hooks/use-theme";
 
 function preview(note: Note) {
   return note.body.trim() || "No additional text";
@@ -19,7 +20,11 @@ function relativeTime(timestamp: number) {
 }
 
 export default function NotesPage() {
-  const { notes, activeId, setActiveId, ready, saveStatus, create, update, remove } = useNotes();
+  const {
+    notes, activeId, setActiveId, ready, saveStatus, totalCount, hasMore, loadingMore, loadMoreError,
+    loadMore, canRetry, create, update, retryFailed, remove,
+  } = useNotes();
+  const { theme, toggleTheme } = useTheme();
   const [query, setQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -43,7 +48,7 @@ export default function NotesPage() {
   const activeNote = notes.find((note) => note.id === activeId) ?? null;
 
   function createNote() {
-    create();
+    void create().catch(() => undefined);
     setSidebarOpen(false);
   }
 
@@ -72,6 +77,14 @@ export default function NotesPage() {
         <div className="brand-row">
           <div className="brand-mark" aria-hidden="true"><span /></div>
           <span className="brand-name">papier</span>
+          <button
+            className="icon-button theme-toggle"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
           <button className="icon-button mobile-close" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar">
             <X size={18} />
           </button>
@@ -91,7 +104,7 @@ export default function NotesPage() {
 
         <div className="section-heading">
           <span>Notes</span>
-          <span>{filteredNotes.length}</span>
+          <span>{query.trim() ? filteredNotes.length : totalCount}</span>
         </div>
 
         <div className="note-list">
@@ -114,6 +127,12 @@ export default function NotesPage() {
           {ready && filteredNotes.length === 0 && query && (
             <p className="no-results">No notes match “{query}”</p>
           )}
+
+          {ready && hasMore && (
+            <button className="load-more-button" onClick={() => void loadMore().catch(() => undefined)} disabled={loadingMore}>
+              {loadingMore ? "Loading…" : loadMoreError ? "Try loading again" : "Load more notes"}
+            </button>
+          )}
         </div>
 
         <div className="sidebar-footer">
@@ -121,8 +140,9 @@ export default function NotesPage() {
             {saveStatus === "loading" && "Connecting to database…"}
             {saveStatus === "saving" && "Saving to database…"}
             {saveStatus === "saved" && "Saved to PostgreSQL"}
-            {saveStatus === "error" && "Database connection failed"}
+            {saveStatus === "error" && (canRetry ? "Changes not saved" : "Database connection failed")}
           </span>
+          {canRetry && <button className="retry-save" onClick={retryFailed}>Retry saving</button>}
           <span className={`status-dot status-${saveStatus}`} />
         </div>
       </aside>
@@ -131,7 +151,16 @@ export default function NotesPage() {
         <header className="mobile-header">
           <button className="icon-button" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar"><Menu size={20} /></button>
           <div className="mobile-brand"><div className="brand-mark small"><span /></div>papier</div>
-          <button className="icon-button" onClick={createNote} aria-label="New note"><Plus size={20} /></button>
+          <div className="mobile-actions">
+            <button
+              className="icon-button"
+              onClick={toggleTheme}
+              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <button className="icon-button" onClick={createNote} aria-label="New note"><Plus size={20} /></button>
+          </div>
         </header>
 
         {!ready ? (
@@ -172,8 +201,16 @@ export default function NotesPage() {
                 onChange={(event) => updateNote({ body: event.target.value })}
                 placeholder="Start writing…"
                 aria-label="Note body"
+                aria-describedby="body-character-count"
                 autoFocus
               />
+              <output
+                id="body-character-count"
+                className="character-count"
+                aria-live="polite"
+              >
+                {activeNote.body.length.toLocaleString("en")} {activeNote.body.length === 1 ? "character" : "characters"}
+              </output>
             </div>
           </article>
         ) : (

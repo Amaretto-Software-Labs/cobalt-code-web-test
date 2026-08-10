@@ -14,4 +14,19 @@ describe("OpenAPI document", () => {
     expect(openApiDocument.paths["/api/notes/{id}"]).toHaveProperty("patch");
     expect(openApiDocument.paths["/api/notes/{id}"]).toHaveProperty("delete");
   });
+
+  it("documents the bounded cursor pagination contract", () => {
+    const list = openApiDocument.paths["/api/notes"].get;
+    expect(list.parameters).toEqual([
+      { $ref: "#/components/parameters/PageCursor" },
+      { $ref: "#/components/parameters/PageLimit" },
+    ]);
+    expect(openApiDocument.components.parameters.PageLimit.schema).toMatchObject({
+      default: 10,
+      maximum: 100,
+    });
+    expect(openApiDocument.components.schemas.NotesPage.properties.items.maxItems).toBe(100);
+    expect(openApiDocument.components.schemas.NotesPage.required).toContain("totalCount");
+    expect(openApiDocument.components.schemas.NotesPage.properties.totalCount.minimum).toBe(0);
+  });
 });
