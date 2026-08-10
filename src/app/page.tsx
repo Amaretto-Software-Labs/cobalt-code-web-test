@@ -22,7 +22,7 @@ function relativeTime(timestamp: number) {
 export default function NotesPage() {
   const {
     notes, activeId, setActiveId, ready, saveStatus, totalCount, hasMore, loadingMore, loadMoreError,
-    loadMore, create, update, remove,
+    loadMore, canRetry, create, update, retryFailed, remove,
   } = useNotes();
   const { theme, toggleTheme } = useTheme();
   const [query, setQuery] = useState("");
@@ -140,8 +140,9 @@ export default function NotesPage() {
             {saveStatus === "loading" && "Connecting to database…"}
             {saveStatus === "saving" && "Saving to database…"}
             {saveStatus === "saved" && "Saved to PostgreSQL"}
-            {saveStatus === "error" && "Database connection failed"}
+            {saveStatus === "error" && (canRetry ? "Changes not saved" : "Database connection failed")}
           </span>
+          {canRetry && <button className="retry-save" onClick={retryFailed}>Retry saving</button>}
           <span className={`status-dot status-${saveStatus}`} />
         </div>
       </aside>

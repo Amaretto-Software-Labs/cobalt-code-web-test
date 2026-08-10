@@ -147,4 +147,59 @@ describe("useNotes persistence orchestration", () => {
     expect(result.current.totalCount).toBe(1);
     await waitFor(() => expect(result.current.saveStatus).toBe("error"));
   });
+
+  it("retains a failed edit and retries it without losing the optimistic value", async () => {
+    api.listNotes.mockResolvedValue({ items: [existingNote], nextCursor: null, totalCount: 1 });
+    api.updateNote.mockRejectedValueOnce(new Error("offline"));
+    const { result } = renderHook(() => useNotes());
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    act(() => { result.current.update(existingNote.id, { title: "Still here" }); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 500)); });
+    await waitFor(() => expect(result.current.saveStatus).toBe("error"));
+    expect(result.current.notes[0]).toMatchObject({ title: "Still here" });
+    expect(result.current.canRetry).toBe(true);
+
+    await act(async () => { result.current.retryFailed(); });
+    await waitFor(() => expect(api.updateNote).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.saveStatus).toBe("saved"));
+    expect(result.current.canRetry).toBe(false);
+    expect(api.updateNote).toHaveBeenLastCalledWith(existingNote.id, expect.objectContaining({ title: "Still here" }));
+  });
+
+  it("does not report saved while another note is waiting in its debounce timer", async () => {
+    const anotherNote = { ...existingNote, id: "1cd83975-e64d-4b6a-a5fb-01d1bd5583a8", title: "Another" };
+    let resolveFirst!: (note: Note) => void;
+    api.listNotes.mockResolvedValue({ items: [existingNote, anotherNote], nextCursor: null, totalCount: 2 });
+    api.updateNote.mockImplementationOnce(() => new Promise<Note>((resolve) => { resolveFirst = resolve; }));
+    const { result } = renderHook(() => useNotes());
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    act(() => { result.current.update(existingNote.id, { title: "First edit" }); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 500)); });
+    await waitFor(() => expect(api.updateNote).toHaveBeenCalledTimes(1));
+    act(() => { result.current.update(anotherNote.id, { title: "Second edit" }); });
+
+    await act(async () => {
+      resolveFirst({ ...existingNote, title: "First edit", updatedAt: 1_800_000_000_000 });
+    });
+    expect(result.current.saveStatus).toBe("saving");
+  });
+
+  it("flushes the latest debounced edit when the page is hidden", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    api.listNotes.mockResolvedValue({ items: [existingNote], nextCursor: null, totalCount: 1 });
+    const { result } = renderHook(() => useNotes());
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    act(() => { result.current.update(existingNote.id, { body: "Latest body" }); });
+    act(() => { window.dispatchEvent(new Event("pagehide")); });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/notes/${existingNote.id}`,
+      expect.objectContaining({ body: expect.stringContaining("Latest body"), keepalive: true }),
+    );
+    vi.unstubAllGlobals();
+  });
 });

@@ -136,6 +136,8 @@ button { color: inherit; }
 .load-more-button:hover:not(:disabled) { background: var(--surface-hover); }
 .load-more-button:disabled { cursor: wait; opacity: .65; }
 .sidebar-footer { display: flex; align-items: center; justify-content: center; gap: 7px; padding-top: 15px; border-top: 1px solid var(--line); color: var(--muted-soft); font-size: 10px; }
+.retry-save { border: 0; border-radius: 4px; background: transparent; color: #a94932; font: inherit; font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.retry-save:hover { color: #7d3525; }
 .status-dot { width: 5px; height: 5px; border-radius: 50%; background: #7da477; }
 .status-loading, .status-saving { background: #d5a83d; animation: status-pulse 1.2s ease-in-out infinite; }
 .status-error { background: #c9583a; }
