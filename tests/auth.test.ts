@@ -25,4 +25,11 @@ describe("authenticatedOwner", () => {
       authenticatedOwner(new Request("http://test/api/notes", { headers: { Authorization: "Bearer bob-token" } })),
     ).toBe("bob");
   });
+
+  it("maps the browser token header to its configured owner", () => {
+    process.env.PAPIER_AUTH_TOKENS = JSON.stringify({ "alice-token": "alice" });
+    expect(
+      authenticatedOwner(new Request("http://test/api/notes", { headers: { "X-Papier-Token": "alice-token" } })),
+    ).toBe("alice");
+  });
 });

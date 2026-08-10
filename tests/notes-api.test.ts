@@ -14,7 +14,7 @@ const createInput = { title: note.title, body: note.body, color: note.color };
 afterEach(() => vi.unstubAllGlobals());
 
 describe("notes API client", () => {
-  it("adds a stored bearer token to requests", async () => {
+  it("adds a stored token using the browser-safe Papier header", async () => {
     vi.stubGlobal("window", {
       localStorage: { getItem: vi.fn().mockReturnValue("alice-token") },
     });
@@ -26,7 +26,8 @@ describe("notes API client", () => {
     await listNotes();
 
     const headers = fetchMock.mock.calls[0][1]?.headers as Headers;
-    expect(headers.get("Authorization")).toBe("Bearer alice-token");
+    expect(headers.get("X-Papier-Token")).toBe("alice-token");
+    expect(headers.has("Authorization")).toBe(false);
   });
 
   it("loads and validates notes", async () => {

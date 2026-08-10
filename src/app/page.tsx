@@ -29,6 +29,7 @@ export default function NotesPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [authToken, setAuthToken] = useState("");
+  const localAuthToken = process.env.NEXT_PUBLIC_PAPIER_LOCAL_TOKEN;
 
   useEffect(() => {
     if (!confirmingDelete) return;
@@ -175,6 +176,11 @@ export default function NotesPage() {
             <FileText size={28} aria-hidden="true" />
             <h1>Unlock your notes</h1>
             <p>Enter the bearer token provided by your Papier administrator.</p>
+            {localAuthToken && (
+              <p className="local-token-hint">
+                Local preview token: <code>{localAuthToken}</code>
+              </p>
+            )}
             <label htmlFor="auth-token">Access token</label>
             <input
               id="auth-token"
