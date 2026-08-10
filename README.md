@@ -36,4 +36,4 @@ npm run test:all
 npm run build
 ```
 
-The integration suite requires the PostgreSQL connection defined by `DATABASE_URL`.
+The integration suite requires the PostgreSQL connection defined by `DATABASE_URL`. It starts a Next.js server and uses a temporary PostgreSQL schema that is dropped after the tests finish.
