@@ -3,10 +3,12 @@ import {
   NOTE_LIMITS,
   isNoteColor,
   isUuid,
+  parseCreateNoteInput,
   parseLegacyNotes,
   parseNote,
   parseNoteChanges,
   parseNotes,
+  parseNotesPage,
 } from "@/domain/note";
 
 const validNote = {
@@ -39,9 +41,33 @@ describe("note domain validation", () => {
     expect(parseNotes({})).toBeNull();
   });
 
+  it("validates paginated collections", () => {
+    expect(parseNotesPage({ items: [validNote], nextCursor: "opaque", totalCount: 12 })).toEqual({
+      items: [validNote],
+      nextCursor: "opaque",
+      totalCount: 12,
+    });
+    expect(parseNotesPage({ items: [validNote], nextCursor: null, totalCount: 1 })).not.toBeNull();
+    expect(parseNotesPage({ items: [validNote], nextCursor: null })).toBeNull();
+    expect(parseNotesPage({ items: [validNote], nextCursor: null, totalCount: 0 })).toBeNull();
+    expect(parseNotesPage({ items: [{ bad: true }], nextCursor: null, totalCount: 1 })).toBeNull();
+    expect(
+      parseNotesPage({ items: Array.from({ length: 101 }, () => validNote), nextCursor: null, totalCount: 101 }),
+    ).toBeNull();
+  });
+
   it("validates editable fields independently", () => {
     expect(parseNoteChanges(validNote)).toEqual({ title: "A note", body: "Some text", color: "sage" });
     expect(parseNoteChanges({ ...validNote, color: "pink" })).toBeNull();
+  });
+
+  it("only accepts editable fields when creating a note", () => {
+    expect(parseCreateNoteInput(validNote)).toBeNull();
+    expect(parseCreateNoteInput({ title: "A note", body: "Some text", color: "sage" })).toEqual({
+      title: "A note",
+      body: "Some text",
+      color: "sage",
+    });
   });
 
   it("migrates legacy notes with a default color and ignores corrupt entries", () => {

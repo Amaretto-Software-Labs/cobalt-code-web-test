@@ -79,14 +79,14 @@ describeWithDatabase("notes HTTP integration", () => {
   }
 
   async function json(response: Response) {
-    return response.json() as Promise<Record<string, unknown> | Array<Record<string, unknown>>>;
+    return response.json() as Promise<Record<string, unknown>>;
   }
 
   it("bootstraps an isolated schema and lists notes over HTTP", async () => {
     const response = await request("/api/notes");
 
     expect(response.status).toBe(200);
-    expect(await json(response)).toEqual([]);
+    expect(await json(response)).toEqual({ items: [], nextCursor: null, totalCount: 0 });
     await expect(
       adminPool.query("SELECT to_regclass($1) IS NOT NULL AS exists", [`${schemaName}.notes`]),
     ).resolves.toMatchObject({ rows: [{ exists: true }] });
@@ -111,20 +111,21 @@ describeWithDatabase("notes HTTP integration", () => {
   });
 
   it("supports the documented note lifecycle and failure responses", async () => {
-    const id = randomUUID();
     const createdResponse = await request("/api/notes", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id, title: "Integration note", body: "Created over HTTP", color: "gold", updatedAt: 1_700_000_000_000 }),
+      body: JSON.stringify({ title: "Integration note", body: "Created over HTTP", color: "gold" }),
     });
     expect(createdResponse.status).toBe(201);
-    expect(await json(createdResponse)).toEqual({
-      id,
+    const created = await json(createdResponse);
+    expect(created).toMatchObject({
+      id: expect.any(String),
       title: "Integration note",
       body: "Created over HTTP",
       color: "gold",
-      updatedAt: 1_700_000_000_000,
+      updatedAt: expect.any(Number),
     });
+    const id = created.id as string;
 
     const invalidPatch = await request("/api/notes/not-a-uuid", {
       method: "PATCH",
@@ -173,6 +174,6 @@ describeWithDatabase("notes HTTP integration", () => {
 
     const listed = await request("/api/notes");
     expect(listed.status).toBe(200);
-    expect(await json(listed)).toEqual([]);
+    expect(await json(listed)).toEqual({ items: [], nextCursor: null, totalCount: 0 });
   });
 });
