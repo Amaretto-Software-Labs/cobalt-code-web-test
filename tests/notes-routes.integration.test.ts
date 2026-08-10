@@ -1,14 +1,16 @@
 import { randomUUID } from "node:crypto";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:net";
 import { join } from "node:path";
-import { spawn, type ChildProcess } from "node:child_process";
+import { promisify } from "node:util";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
 const schemaName = `notes_integration_${randomUUID().replaceAll("-", "")}`;
+const execFileAsync = promisify(execFile);
 
 async function findAvailablePort() {
   const server = createServer();
@@ -51,6 +53,16 @@ describeWithDatabase("notes HTTP integration", () => {
 
   beforeAll(async () => {
     await adminPool.query(`CREATE SCHEMA ${schemaName}`);
+    const scopedDatabaseUrl = databaseUrlForSchema(databaseUrl!);
+    const databaseEnvironment = { ...process.env, DATABASE_URL: scopedDatabaseUrl };
+    await execFileAsync(process.execPath, ["scripts/migrate.mjs"], {
+      cwd: process.cwd(),
+      env: databaseEnvironment,
+    });
+    await execFileAsync(process.execPath, ["scripts/check-schema.mjs"], {
+      cwd: process.cwd(),
+      env: databaseEnvironment,
+    });
 
     const port = await portPromise;
     origin = `http://127.0.0.1:${port}`;
@@ -58,7 +70,7 @@ describeWithDatabase("notes HTTP integration", () => {
       process.execPath,
       [join(process.cwd(), "node_modules/next/dist/bin/next"), "dev", "--hostname", "127.0.0.1", "--port", String(port)],
       {
-        env: { ...process.env, DATABASE_URL: databaseUrlForSchema(databaseUrl!) },
+        env: databaseEnvironment,
         stdio: "ignore",
       },
     );
