@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PostgresNoteRepository } from "@/server/note-repository";
 
@@ -12,7 +12,7 @@ const execFileAsync = promisify(execFile);
 describeWithDatabase("PostgresNoteRepository integration", () => {
   const pool = new Pool({ connectionString });
   const schema = `papier_test_${randomUUID().replaceAll("-", "")}`;
-  let client!: Awaited<ReturnType<Pool["connect"]>>;
+  let client!: PoolClient;
   let repository!: PostgresNoteRepository;
   const paginationIds = [
     "ffffffff-ffff-4fff-bfff-fffffffffff1",
