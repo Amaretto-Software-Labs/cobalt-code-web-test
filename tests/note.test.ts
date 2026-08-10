@@ -8,6 +8,7 @@ import {
   parseNote,
   parseNoteChanges,
   parseNotes,
+  parseNotesPage,
 } from "@/domain/note";
 
 const validNote = {
@@ -38,6 +39,21 @@ describe("note domain validation", () => {
     expect(parseNotes([validNote])).toEqual([validNote]);
     expect(parseNotes([validNote, { ...validNote, color: "pink" }])).toBeNull();
     expect(parseNotes({})).toBeNull();
+  });
+
+  it("validates paginated collections", () => {
+    expect(parseNotesPage({ items: [validNote], nextCursor: "opaque", totalCount: 12 })).toEqual({
+      items: [validNote],
+      nextCursor: "opaque",
+      totalCount: 12,
+    });
+    expect(parseNotesPage({ items: [validNote], nextCursor: null, totalCount: 1 })).not.toBeNull();
+    expect(parseNotesPage({ items: [validNote], nextCursor: null })).toBeNull();
+    expect(parseNotesPage({ items: [validNote], nextCursor: null, totalCount: 0 })).toBeNull();
+    expect(parseNotesPage({ items: [{ bad: true }], nextCursor: null, totalCount: 1 })).toBeNull();
+    expect(
+      parseNotesPage({ items: Array.from({ length: 101 }, () => validNote), nextCursor: null, totalCount: 101 }),
+    ).toBeNull();
   });
 
   it("validates editable fields independently", () => {

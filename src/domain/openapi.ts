@@ -28,15 +28,20 @@ export const openApiDocument = {
         tags: ["Notes"],
         summary: "List notes",
         operationId: "listNotes",
+        parameters: [
+          { $ref: "#/components/parameters/PageCursor" },
+          { $ref: "#/components/parameters/PageLimit" },
+        ],
         responses: {
           "200": {
             description: "Notes ordered by most recently updated.",
             content: {
               "application/json": {
-                schema: { type: "array", items: { $ref: "#/components/schemas/Note" } },
+                schema: { $ref: "#/components/schemas/NotesPage" },
               },
             },
           },
+          "400": errorResponses["400"],
         },
       },
       post: {
@@ -94,6 +99,18 @@ export const openApiDocument = {
         description: "The note UUID.",
         schema: { type: "string", format: "uuid" },
       },
+      PageCursor: {
+        name: "cursor",
+        in: "query",
+        description: "Opaque continuation cursor returned by the previous page.",
+        schema: { type: "string" },
+      },
+      PageLimit: {
+        name: "limit",
+        in: "query",
+        description: "Number of notes to return.",
+        schema: { type: "integer", minimum: 1, maximum: 100, default: 10 },
+      },
     },
     schemas: {
       Note: {
@@ -106,6 +123,20 @@ export const openApiDocument = {
           body: { type: "string", maxLength: NOTE_LIMITS.body, example: "Build a quiet place to think." },
           color: { type: "string", enum: colorIds, example: "sage" },
           updatedAt: { type: "integer", format: "int64", minimum: 0, example: 1784577600000 },
+        },
+      },
+      NotesPage: {
+        type: "object",
+        additionalProperties: false,
+        required: ["items", "nextCursor", "totalCount"],
+        properties: {
+          items: { type: "array", items: { $ref: "#/components/schemas/Note" }, maxItems: 100 },
+          nextCursor: { type: ["string", "null"] },
+          totalCount: {
+            type: "integer",
+            minimum: 0,
+            description: "Total number of notes in the collection across all pages.",
+          },
         },
       },
       NoteChanges: {

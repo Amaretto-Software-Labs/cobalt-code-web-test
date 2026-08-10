@@ -13,12 +13,17 @@ export function useNotes() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("loading");
   const notesRef = useRef<Note[]>([]);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const queues = useRef(new Map<string, Promise<unknown>>());
   const pendingNotes = useRef(new Map<string, Note>());
   const operationCount = useRef(0);
+  const loadingMoreRef = useRef(false);
 
   function beginOperation() {
     operationCount.current += 1;
@@ -57,7 +62,10 @@ export function useNotes() {
 
     async function load() {
       try {
-        let databaseNotes = await notesApi.listNotes();
+        const page = await notesApi.listNotes();
+        let databaseNotes = page.items;
+        let databaseNextCursor = page.nextCursor;
+        let databaseTotalCount = page.totalCount;
         const saved = localStorage.getItem(STORAGE_KEY);
 
         if (databaseNotes.length === 0 && saved) {
@@ -65,12 +73,16 @@ export function useNotes() {
           databaseNotes = await Promise.all(
             localNotes.map(({ title, body, color }) => notesApi.createNote({ title, body, color })),
           );
+          databaseNextCursor = null;
+          databaseTotalCount = databaseNotes.length;
         }
 
         localStorage.removeItem(STORAGE_KEY);
         if (!cancelled) {
           notesRef.current = databaseNotes;
           setNotes(databaseNotes);
+          setNextCursor(databaseNextCursor);
+          setTotalCount(databaseTotalCount);
           setActiveId(databaseNotes[0]?.id ?? null);
           setSaveStatus("saved");
         }
@@ -103,6 +115,27 @@ export function useNotes() {
     };
   }, []);
 
+  async function loadMore() {
+    if (!nextCursor || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    setLoadMoreError(false);
+    try {
+      const page = await notesApi.listNotes(nextCursor);
+      const knownIds = new Set(notesRef.current.map((note) => note.id));
+      notesRef.current = [...notesRef.current, ...page.items.filter((note) => !knownIds.has(note.id))];
+      setNotes(notesRef.current);
+      setNextCursor(page.nextCursor);
+      setTotalCount(page.totalCount);
+    } catch (error) {
+      setLoadMoreError(true);
+      throw error;
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }
+
   async function create() {
     const input: CreateNoteInput = {
       title: "",
@@ -115,6 +148,7 @@ export function useNotes() {
       const note = await notesApi.createNote(input);
       notesRef.current = [note, ...notesRef.current];
       setNotes(notesRef.current);
+      setTotalCount((count) => count + 1);
       setActiveId(note.id);
       return note;
     } catch (error) {
@@ -168,8 +202,23 @@ export function useNotes() {
     }
     notesRef.current = notesRef.current.filter((note) => note.id !== id);
     setNotes(notesRef.current);
+    setTotalCount((count) => Math.max(0, count - 1));
     setActiveId((selected) => (selected === id ? (notesRef.current[0]?.id ?? null) : selected));
   }
 
-  return { notes, activeId, setActiveId, ready, saveStatus, create, update, remove };
+  return {
+    notes,
+    activeId,
+    setActiveId,
+    ready,
+    saveStatus,
+    totalCount,
+    hasMore: nextCursor !== null,
+    loadingMore,
+    loadMoreError,
+    loadMore,
+    create,
+    update,
+    remove,
+  };
 }
