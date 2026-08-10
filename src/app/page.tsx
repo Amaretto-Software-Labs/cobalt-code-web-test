@@ -21,7 +21,7 @@ function relativeTime(timestamp: number) {
 
 export default function NotesPage() {
   const { notes, activeId, setActiveId, ready, saveStatus, create, update, remove } = useNotes();
-  const { toggleTheme } = useTheme();
+  const { theme, toggleTheme } = useTheme();
   const [query, setQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -64,18 +64,6 @@ export default function NotesPage() {
     }
   }
 
-  const themeToggle = (
-    <button
-      className="icon-button theme-toggle"
-      onClick={toggleTheme}
-      aria-label="Toggle color theme"
-      title="Toggle color theme"
-    >
-      <Sun className="theme-icon theme-icon-sun" size={17} />
-      <Moon className="theme-icon theme-icon-moon" size={17} />
-    </button>
-  );
-
   return (
     <main className="app-shell">
       {sidebarOpen && (
@@ -86,7 +74,14 @@ export default function NotesPage() {
         <div className="brand-row">
           <div className="brand-mark" aria-hidden="true"><span /></div>
           <span className="brand-name">papier</span>
-          <span className="desktop-theme-toggle">{themeToggle}</span>
+          <button
+            className="icon-button theme-toggle"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
           <button className="icon-button mobile-close" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar">
             <X size={18} />
           </button>
@@ -146,8 +141,14 @@ export default function NotesPage() {
         <header className="mobile-header">
           <button className="icon-button" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar"><Menu size={20} /></button>
           <div className="mobile-brand"><div className="brand-mark small"><span /></div>papier</div>
-          <div className="mobile-header-actions">
-            {themeToggle}
+          <div className="mobile-actions">
+            <button
+              className="icon-button"
+              onClick={toggleTheme}
+              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
             <button className="icon-button" onClick={createNote} aria-label="New note"><Plus size={20} /></button>
           </div>
         </header>
@@ -190,8 +191,16 @@ export default function NotesPage() {
                 onChange={(event) => updateNote({ body: event.target.value })}
                 placeholder="Start writing…"
                 aria-label="Note body"
+                aria-describedby="body-character-count"
                 autoFocus
               />
+              <output
+                id="body-character-count"
+                className="character-count"
+                aria-live="polite"
+              >
+                {activeNote.body.length.toLocaleString("en")} {activeNote.body.length === 1 ? "character" : "characters"}
+              </output>
             </div>
           </article>
         ) : (

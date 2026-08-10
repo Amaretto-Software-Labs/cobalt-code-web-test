@@ -8,10 +8,13 @@ export const metadata: Metadata = {
 
 const themeInitializer = `
   (() => {
+    let savedTheme = null;
     try {
-      const savedTheme = localStorage.getItem("papier-theme");
-      const theme = savedTheme === "light" || savedTheme === "dark"
-        ? savedTheme
+      savedTheme = localStorage.getItem("papier-theme");
+    } catch {}
+
+    try {
+      const theme = savedTheme === "light" || savedTheme === "dark" ? savedTheme
         : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
       document.documentElement.dataset.theme = theme;
       document.documentElement.style.colorScheme = theme;
