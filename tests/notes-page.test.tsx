@@ -31,6 +31,10 @@ vi.mock("@/hooks/use-notes", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-theme", () => ({
+  useTheme: () => ({ theme: "light", toggleTheme: vi.fn() }),
+}));
+
 describe("NotesPage", () => {
   beforeEach(() => {
     state.note.body = "Text";
