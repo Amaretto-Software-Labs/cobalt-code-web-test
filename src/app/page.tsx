@@ -48,7 +48,7 @@ export default function NotesPage() {
   const activeNote = notes.find((note) => note.id === activeId) ?? null;
 
   function createNote() {
-    create();
+    void create().catch(() => undefined);
     setSidebarOpen(false);
   }
 

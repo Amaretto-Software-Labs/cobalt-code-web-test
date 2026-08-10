@@ -38,7 +38,11 @@ beforeEach(() => {
   localStorage.clear();
   vi.clearAllMocks();
   api.listNotes.mockResolvedValue({ items: [], nextCursor: null, totalCount: 0 });
-  api.createNote.mockImplementation(async (note: Note) => note);
+  api.createNote.mockImplementation(async (input: Omit<Note, "id" | "updatedAt">) => ({
+    id: crypto.randomUUID(),
+    ...input,
+    updatedAt: 1_700_000_000_000,
+  }));
   api.updateNote.mockImplementation(async (id: string, changes: Omit<Note, "id" | "updatedAt">) => ({
     id,
     ...changes,
@@ -96,36 +100,28 @@ describe("useNotes persistence orchestration", () => {
     const { result } = renderHook(() => useNotes());
 
     await waitFor(() => expect(result.current.ready).toBe(true));
-    expect(api.createNote).toHaveBeenCalledWith({ ...existingNote, color: "coral" });
+    expect(api.createNote).toHaveBeenCalledWith({ title: "Existing", body: "Text", color: "coral" });
     expect(localStorage.getItem("papier-notes")).toBeNull();
   });
 
-  it("serializes an edit behind an in-flight create", async () => {
-    let resolveCreate!: (note: Note) => void;
-    api.createNote.mockReturnValue(new Promise<Note>((resolve) => { resolveCreate = resolve; }));
+  it("uses the server-created note identity", async () => {
+    const createdNote = { ...existingNote, id: "cd81b56d-9b57-4e22-b895-98cdb8b920cf", title: "" };
+    api.createNote.mockResolvedValue(createdNote);
     const { result } = renderHook(() => useNotes());
     await waitFor(() => expect(result.current.ready).toBe(true));
 
-    act(() => { result.current.create(); });
-    const created = result.current.notes[0];
-    act(() => { result.current.update(created.id, { title: "Typed quickly" }); });
-
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 500)); });
-    expect(api.updateNote).not.toHaveBeenCalled();
-
-    await act(async () => { resolveCreate(created); });
-    await waitFor(() => expect(api.updateNote).toHaveBeenCalledWith(
-      created.id,
-      expect.objectContaining({ title: "Typed quickly" }),
-    ));
+    await act(async () => { await result.current.create(); });
+    expect(api.createNote).toHaveBeenCalledWith({ title: "", body: "", color: "coral" });
+    expect(result.current.notes[0]).toEqual(createdNote);
+    expect(result.current.activeId).toBe(createdNote.id);
   });
 
   it("updates the total after creating and deleting a note", async () => {
     const { result } = renderHook(() => useNotes());
     await waitFor(() => expect(result.current.ready).toBe(true));
 
-    act(() => { result.current.create(); });
-    const created = result.current.notes[0];
+    let created!: Note;
+    await act(async () => { created = await result.current.create(); });
     expect(result.current.totalCount).toBe(1);
 
     await act(async () => { await result.current.remove(created.id); });

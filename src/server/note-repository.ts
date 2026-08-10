@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import type { Note, NoteChanges, NoteColor } from "@/domain/note";
+import type { CreateNoteInput, Note, NoteChanges, NoteColor } from "@/domain/note";
 import { db, ensureNotesSchema } from "@/lib/db";
 
 type Database = Pick<Pool, "query"> | Pick<PoolClient, "query">;
@@ -18,7 +19,7 @@ type ListedNoteRow = NoteRow & {
 
 export interface NoteRepository {
   list(options: NoteListOptions): Promise<NoteListPage>;
-  upsert(note: Note): Promise<Note>;
+  create(input: CreateNoteInput): Promise<Note>;
   update(id: string, changes: NoteChanges): Promise<Note | null>;
   delete(id: string): Promise<boolean>;
 }
@@ -82,18 +83,13 @@ export class PostgresNoteRepository implements NoteRepository {
     };
   }
 
-  async upsert(note: Note) {
+  async create(input: CreateNoteInput) {
     await this.ensureSchema();
     const result = await this.database.query<NoteRow>(
       `INSERT INTO notes (id, title, body, color, updated_at)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (id) DO UPDATE
-       SET title = EXCLUDED.title,
-           body = EXCLUDED.body,
-           color = EXCLUDED.color,
-           updated_at = EXCLUDED.updated_at
+       VALUES ($1, $2, $3, $4, NOW())
        RETURNING id, title, body, color, updated_at`,
-      [note.id, note.title, note.body, note.color, new Date(note.updatedAt)],
+      [randomUUID(), input.title, input.body, input.color],
     );
     return fromRow(result.rows[0]);
   }

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ensureNotesSchema } from "@/lib/db";
@@ -10,7 +9,7 @@ const describeWithDatabase = connectionString ? describe : describe.skip;
 describeWithDatabase("PostgresNoteRepository integration", () => {
   const pool = new Pool({ connectionString });
   const repository = new PostgresNoteRepository(pool, ensureNotesSchema);
-  const id = randomUUID();
+  let id: string | undefined;
   const paginationIds = [
     "ffffffff-ffff-4fff-bfff-fffffffffff1",
     "ffffffff-ffff-4fff-bfff-fffffffffff2",
@@ -27,49 +26,43 @@ describeWithDatabase("PostgresNoteRepository integration", () => {
   });
 
   afterAll(async () => {
-    await pool.query("DELETE FROM notes WHERE id = $1 OR id = ANY($2::uuid[]) OR id = ANY($3::uuid[])", [
-      id,
-      paginationIds,
-      precisionIds,
+    await pool.query("DELETE FROM notes WHERE id = ANY($1::uuid[])", [
+      [...paginationIds, ...precisionIds, ...(id ? [id] : [])],
     ]);
     await pool.end();
   });
 
   it("covers the full note lifecycle against PostgreSQL", async () => {
-    const created = await repository.upsert({
-      id,
+    const created = await repository.create({
       title: "Integration note",
       body: "Created",
       color: "gold",
-      updatedAt: 1_700_000_000_000,
     });
-    expect(created).toMatchObject({ id, title: "Integration note", color: "gold" });
+    id = created.id;
+    expect(created).toMatchObject({ title: "Integration note", color: "gold" });
     await expect(repository.list({ limit: 100, cursor: null })).resolves.toMatchObject({
       items: expect.arrayContaining([created]),
     });
 
-    const updated = await repository.update(id, {
+    const updated = await repository.update(created.id, {
       title: "Updated integration note",
       body: "Updated",
       color: "sky",
     });
     expect(updated).toMatchObject({ id, title: "Updated integration note", color: "sky" });
 
-    await expect(repository.delete(id)).resolves.toBe(true);
-    await expect(repository.delete(id)).resolves.toBe(false);
+    await expect(repository.delete(created.id)).resolves.toBe(true);
+    await expect(repository.delete(created.id)).resolves.toBe(false);
   });
 
   it("paginates equal timestamps with the UUID as a stable descending tie-breaker", async () => {
-    const updatedAt = 253_402_300_799_000;
-    for (const [position, noteId] of paginationIds.entries()) {
-      await repository.upsert({
-        id: noteId,
-        title: `Pagination ${position}`,
-        body: "Stable ordering",
-        color: "lilac",
-        updatedAt,
-      });
-    }
+    await pool.query(
+      `INSERT INTO notes (id, title, body, color, updated_at)
+       VALUES ($1, 'Pagination 0', 'Stable ordering', 'lilac', '9999-12-31T23:59:59Z'),
+              ($2, 'Pagination 1', 'Stable ordering', 'lilac', '9999-12-31T23:59:59Z'),
+              ($3, 'Pagination 2', 'Stable ordering', 'lilac', '9999-12-31T23:59:59Z')`,
+      paginationIds,
+    );
 
     const first = await repository.list({ limit: 2, cursor: null });
     expect(first.totalCount).toBeGreaterThanOrEqual(3);

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { NOTE_PAGE_SIZE, isUuid, parseNote } from "@/domain/note";
+import { NOTE_PAGE_SIZE, isUuid, parseCreateNoteInput } from "@/domain/note";
 import { noteRepository, type NoteListCursor } from "@/server/note-repository";
 
 async function readJson(request: Request): Promise<unknown> {
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const note = parseNote(await readJson(request));
-  if (!note) return NextResponse.json({ error: "Invalid note" }, { status: 400 });
-  return NextResponse.json(await noteRepository.upsert(note), { status: 201 });
+  const input = parseCreateNoteInput(await readJson(request));
+  if (!input) return NextResponse.json({ error: "Invalid note" }, { status: 400 });
+  return NextResponse.json(await noteRepository.create(input), { status: 201 });
 }

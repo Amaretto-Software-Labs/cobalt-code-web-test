@@ -2,12 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const repository = vi.hoisted(() => ({
   list: vi.fn(),
-  upsert: vi.fn(),
+  create: vi.fn(),
 }));
 
 vi.mock("@/server/note-repository", () => ({ noteRepository: repository }));
 
-import { GET } from "@/app/api/notes/route";
+import { GET, POST } from "@/app/api/notes/route";
 
 const cursor = {
   id: "5e80db90-9a7f-4fa8-b4b5-8fc06f1b8baa",
@@ -54,5 +54,38 @@ describe("GET /api/notes", () => {
     const response = await GET(new Request(`http://localhost/api/notes?cursor=${encodeURIComponent(value)}`));
     expect(response.status).toBe(400);
     expect(repository.list).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/notes", () => {
+  const createdNote = {
+    id: "5e80db90-9a7f-4fa8-b4b5-8fc06f1b8baa",
+    title: "Created by the server",
+    body: "Some text",
+    color: "sage" as const,
+    updatedAt: 1_700_000_000_000,
+  };
+
+  it("creates from editable fields and returns the server-generated note", async () => {
+    repository.create.mockResolvedValue(createdNote);
+    const input = { title: createdNote.title, body: createdNote.body, color: createdNote.color };
+    const response = await POST(new Request("http://localhost/api/notes", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }));
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual(createdNote);
+    expect(repository.create).toHaveBeenCalledWith(input);
+  });
+
+  it("rejects client-controlled identity and timestamps", async () => {
+    const response = await POST(new Request("http://localhost/api/notes", {
+      method: "POST",
+      body: JSON.stringify(createdNote),
+    }));
+
+    expect(response.status).toBe(400);
+    expect(repository.create).not.toHaveBeenCalled();
   });
 });

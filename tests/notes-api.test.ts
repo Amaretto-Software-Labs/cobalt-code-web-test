@@ -9,6 +9,8 @@ const note = {
   updatedAt: 1_700_000_000_000,
 };
 
+const createInput = { title: note.title, body: note.body, color: note.color };
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe("notes API client", () => {
@@ -44,7 +46,7 @@ describe("notes API client", () => {
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(createNote(note)).resolves.toEqual(note);
+    await expect(createNote(createInput)).resolves.toEqual(note);
     await expect(updateNote(note.id, { ...note, title: "Updated" })).resolves.toMatchObject({ title: "Updated" });
     await expect(deleteNote(note.id)).resolves.toBeUndefined();
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
@@ -52,6 +54,7 @@ describe("notes API client", () => {
       `/api/notes/${note.id}`,
       `/api/notes/${note.id}`,
     ]);
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual(createInput);
   });
 
   it("preserves HTTP status information on failures", async () => {
