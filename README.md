@@ -40,4 +40,4 @@ npm run test:all
 npm run build
 ```
 
-The integration suite requires the PostgreSQL connection defined by `DATABASE_URL`; it creates an isolated temporary schema and validates that the committed migrations initialize and upgrade it safely.
+The integration suite requires the PostgreSQL connection defined by `DATABASE_URL`. It creates temporary schemas, validates idempotent migrations and repository behavior, and exercises the API through a real Next.js server before dropping the test schemas.

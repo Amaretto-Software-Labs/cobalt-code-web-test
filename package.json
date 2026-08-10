@@ -11,7 +11,7 @@
     "db:check": "node scripts/check-schema.mjs",
     "lint": "eslint .",
     "test": "vitest run --exclude '**/*.integration.test.ts'",
-    "test:integration": "vitest run tests/postgres.integration.test.ts --maxWorkers=1",
+    "test:integration": "vitest run tests/postgres.integration.test.ts tests/notes-routes.integration.test.ts --maxWorkers=1",
     "test:all": "npm run test && npm run test:integration"
   },
   "dependencies": {

@@ -18,6 +18,18 @@ export type Note = {
 };
 
 export type NoteChanges = Pick<Note, "title" | "body" | "color">;
+export type CreateNoteInput = NoteChanges;
+
+export type NotesPage = {
+  items: Note[];
+  nextCursor: string | null;
+  totalCount: number;
+};
+
+export const NOTE_PAGE_SIZE = {
+  default: 10,
+  maximum: 100,
+} as const;
 
 export const NOTE_LIMITS = {
   title: 500,
@@ -79,10 +91,36 @@ export function parseNoteChanges(value: unknown): NoteChanges | null {
   return { title: changes.title, body: changes.body, color: changes.color };
 }
 
+export function parseCreateNoteInput(value: unknown): CreateNoteInput | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+
+  if (!Object.keys(input).every((key) => key === "title" || key === "body" || key === "color")) return null;
+  return parseNoteChanges(input);
+}
+
 export function parseNotes(value: unknown): Note[] | null {
   if (!Array.isArray(value)) return null;
   const notes = value.map(parseNote);
   return notes.every((note): note is Note => note !== null) ? notes : null;
+}
+
+export function parseNotesPage(value: unknown): NotesPage | null {
+  if (!value || typeof value !== "object") return null;
+  const page = value as Record<string, unknown>;
+  const items = parseNotes(page.items);
+
+  if (
+    !items ||
+    items.length > NOTE_PAGE_SIZE.maximum ||
+    typeof page.totalCount !== "number" ||
+    !Number.isSafeInteger(page.totalCount) ||
+    page.totalCount < items.length ||
+    (page.nextCursor !== null && typeof page.nextCursor !== "string")
+  ) {
+    return null;
+  }
+  return { items, nextCursor: page.nextCursor, totalCount: page.totalCount };
 }
 
 export function parseLegacyNotes(value: string): Note[] {
