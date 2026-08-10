@@ -15,6 +15,7 @@ export class NotesApiError extends Error {
 }
 
 export const AUTH_TOKEN_STORAGE_KEY = "papier-auth-token";
+export const AUTH_TOKEN_HEADER = "X-Papier-Token";
 let inMemoryAuthToken: string | null = null;
 
 function storedAuthToken() {
@@ -38,7 +39,7 @@ export function setAuthToken(token: string) {
 export function authorizationHeaders(initial?: HeadersInit) {
   const headers = new Headers(initial);
   const token = typeof window === "undefined" ? null : storedAuthToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (token) headers.set(AUTH_TOKEN_HEADER, token);
   return headers;
 }
 
@@ -47,7 +48,7 @@ async function requestJson(url: string, init?: RequestInit): Promise<unknown> {
   let requestInit = init;
   if (token) {
     const headers = new Headers(init?.headers);
-    headers.set("Authorization", `Bearer ${token}`);
+    headers.set(AUTH_TOKEN_HEADER, token);
     requestInit = { ...init, headers };
   }
   const response = await fetch(url, requestInit);

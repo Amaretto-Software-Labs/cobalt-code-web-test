@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import NotesPage from "@/app/page";
 
 const state = vi.hoisted(() => ({
+  authenticationRequired: false,
   note: {
     id: "5e80db90-9a7f-4fa8-b4b5-8fc06f1b8baa",
     title: "Existing",
@@ -25,7 +26,7 @@ vi.mock("@/hooks/use-notes", () => ({
     setActiveId: vi.fn(),
     ready: true,
     saveStatus: "saved",
-    authenticationRequired: false,
+    authenticationRequired: state.authenticationRequired,
     authenticate: vi.fn(),
     create: vi.fn(),
     update,
@@ -38,9 +39,22 @@ vi.mock("@/hooks/use-theme", () => ({
 }));
 
 describe("NotesPage", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   beforeEach(() => {
+    state.authenticationRequired = false;
     state.note.body = "Text";
     update.mockClear();
+  });
+
+  it("shows the configured local token on the unlock screen", () => {
+    vi.stubEnv("NEXT_PUBLIC_PAPIER_LOCAL_TOKEN", "papier-local");
+    state.authenticationRequired = true;
+
+    render(<NotesPage />);
+
+    expect(screen.getByText("Local preview token:")).toBeTruthy();
+    expect(screen.getByText("papier-local")).toBeTruthy();
   });
 
   it("shows a live character count beneath the body editor", () => {

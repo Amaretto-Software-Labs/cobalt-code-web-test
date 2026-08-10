@@ -26,13 +26,15 @@ function matchesToken(expected: string, received: string): boolean {
 }
 
 /**
- * Returns the stable owner ID associated with a Bearer token, or null when the
- * request is unauthenticated. `PAPIER_AUTH_TOKENS` is a JSON object mapping
- * bearer tokens to owner IDs and must be supplied by the deployment.
+ * Returns the stable owner ID associated with a token, or null when the request
+ * is unauthenticated. API clients use a Bearer token; the browser uses the
+ * dedicated X-Papier-Token header so preview gateways can use Authorization for
+ * their own access control. `PAPIER_AUTH_TOKENS` maps tokens to owner IDs.
  */
 export function authenticatedOwner(request: Request): string | null {
   const authorization = request.headers.get("authorization");
-  const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  const token = request.headers.get("x-papier-token")?.trim()
+    || authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
   if (!token) return null;
 
   const tokenOwners = parseTokenOwners(process.env.PAPIER_AUTH_TOKENS);
