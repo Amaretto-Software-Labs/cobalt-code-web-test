@@ -1,4 +1,11 @@
-import { parseNote, parseNotes, type Note, type NoteChanges } from "@/domain/note";
+import {
+  parseNote,
+  parseNotesPage,
+  type CreateNoteInput,
+  type Note,
+  type NoteChanges,
+  type NotesPage,
+} from "@/domain/note";
 
 export class NotesApiError extends Error {
   constructor(message: string, public readonly status: number) {
@@ -7,25 +14,61 @@ export class NotesApiError extends Error {
   }
 }
 
+export const AUTH_TOKEN_STORAGE_KEY = "papier-auth-token";
+let inMemoryAuthToken: string | null = null;
+
+function storedAuthToken() {
+  if (inMemoryAuthToken) return inMemoryAuthToken;
+  try {
+    return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthToken(token: string) {
+  inMemoryAuthToken = token;
+  try {
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+  } catch {
+    // Keep the token for this tab when browser storage is unavailable.
+  }
+}
+
+export function authorizationHeaders(initial?: HeadersInit) {
+  const headers = new Headers(initial);
+  const token = typeof window === "undefined" ? null : storedAuthToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  return headers;
+}
+
 async function requestJson(url: string, init?: RequestInit): Promise<unknown> {
-  const response = await fetch(url, init);
+  const token = typeof window === "undefined" ? null : storedAuthToken();
+  let requestInit = init;
+  if (token) {
+    const headers = new Headers(init?.headers);
+    headers.set("Authorization", `Bearer ${token}`);
+    requestInit = { ...init, headers };
+  }
+  const response = await fetch(url, requestInit);
   if (!response.ok) throw new NotesApiError(`Notes request failed (${response.status})`, response.status);
   if (response.status === 204) return null;
   return response.json();
 }
 
-export async function listNotes(): Promise<Note[]> {
-  const notes = parseNotes(await requestJson("/api/notes"));
-  if (!notes) throw new NotesApiError("The server returned invalid notes", 500);
-  return notes;
+export async function listNotes(cursor?: string): Promise<NotesPage> {
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  const page = parseNotesPage(await requestJson(`/api/notes${query}`));
+  if (!page) throw new NotesApiError("The server returned an invalid notes page", 500);
+  return page;
 }
 
-export async function createNote(note: Note): Promise<Note> {
+export async function createNote(input: CreateNoteInput): Promise<Note> {
   const created = parseNote(
     await requestJson("/api/notes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(note),
+      body: JSON.stringify(input),
     }),
   );
   if (!created) throw new NotesApiError("The server returned an invalid note", 500);
