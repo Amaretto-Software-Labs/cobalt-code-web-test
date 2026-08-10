@@ -132,6 +132,9 @@ button { color: inherit; }
 .note-card-preview { overflow: hidden; color: var(--muted); font-size: 12px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .note-card-time { margin-top: 3px; color: var(--muted-faint); font-size: 10px; }
 .no-results { padding: 26px 8px; color: var(--muted-soft); font-size: 12px; text-align: center; }
+.load-more-button { display: block; width: calc(100% - 16px); margin: 12px 8px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 9px 12px; color: var(--muted); font-size: 11px; font-weight: 700; cursor: pointer; }
+.load-more-button:hover:not(:disabled) { background: var(--surface-hover); }
+.load-more-button:disabled { cursor: wait; opacity: .65; }
 .sidebar-footer { display: flex; align-items: center; justify-content: center; gap: 7px; padding-top: 15px; border-top: 1px solid var(--line); color: var(--muted-soft); font-size: 10px; }
 .status-dot { width: 5px; height: 5px; border-radius: 50%; background: #7da477; }
 .status-loading, .status-saving { background: #d5a83d; animation: status-pulse 1.2s ease-in-out infinite; }

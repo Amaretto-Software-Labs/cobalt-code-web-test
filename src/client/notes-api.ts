@@ -1,4 +1,4 @@
-import { parseNote, parseNotes, type Note, type NoteChanges } from "@/domain/note";
+import { parseNote, parseNotesPage, type Note, type NoteChanges, type NotesPage } from "@/domain/note";
 
 export class NotesApiError extends Error {
   constructor(message: string, public readonly status: number) {
@@ -14,10 +14,11 @@ async function requestJson(url: string, init?: RequestInit): Promise<unknown> {
   return response.json();
 }
 
-export async function listNotes(): Promise<Note[]> {
-  const notes = parseNotes(await requestJson("/api/notes"));
-  if (!notes) throw new NotesApiError("The server returned invalid notes", 500);
-  return notes;
+export async function listNotes(cursor?: string): Promise<NotesPage> {
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  const page = parseNotesPage(await requestJson(`/api/notes${query}`));
+  if (!page) throw new NotesApiError("The server returned an invalid notes page", 500);
+  return page;
 }
 
 export async function createNote(note: Note): Promise<Note> {
