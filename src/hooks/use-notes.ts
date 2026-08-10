@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as notesApi from "@/client/notes-api";
-import { parseLegacyNotes, type Note, type NoteChanges } from "@/domain/note";
+import { parseLegacyNotes, type CreateNoteInput, type Note, type NoteChanges } from "@/domain/note";
 
 export type SaveStatus = "loading" | "saved" | "saving" | "error";
 
@@ -13,6 +13,10 @@ export function useNotes() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("loading");
   const [canRetry, setCanRetry] = useState(false);
   const notesRef = useRef<Note[]>([]);
@@ -24,6 +28,7 @@ export function useNotes() {
   const lastOperationFailed = useRef(false);
   const readyRef = useRef(false);
   const loadFailed = useRef(false);
+  const loadingMoreRef = useRef(false);
 
   function refreshPersistence() {
     if (!readyRef.current) return;
@@ -75,18 +80,27 @@ export function useNotes() {
 
     async function load() {
       try {
-        let databaseNotes = await notesApi.listNotes();
+        const page = await notesApi.listNotes();
+        let databaseNotes = page.items;
+        let databaseNextCursor = page.nextCursor;
+        let databaseTotalCount = page.totalCount;
         const saved = localStorage.getItem(STORAGE_KEY);
 
         if (databaseNotes.length === 0 && saved) {
           const localNotes = parseLegacyNotes(saved);
-          databaseNotes = await Promise.all(localNotes.map((note) => notesApi.createNote(note)));
+          databaseNotes = await Promise.all(
+            localNotes.map(({ title, body, color }) => notesApi.createNote({ title, body, color })),
+          );
+          databaseNextCursor = null;
+          databaseTotalCount = databaseNotes.length;
         }
 
         localStorage.removeItem(STORAGE_KEY);
         if (!cancelled) {
           notesRef.current = databaseNotes;
           setNotes(databaseNotes);
+          setNextCursor(databaseNextCursor);
+          setTotalCount(databaseTotalCount);
           setActiveId(databaseNotes[0]?.id ?? null);
           readyRef.current = true;
           loadFailed.current = false;
@@ -125,19 +139,47 @@ export function useNotes() {
     };
   }, []);
 
-  function create() {
-    const note: Note = {
-      id: crypto.randomUUID(),
+  async function loadMore() {
+    if (!nextCursor || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    setLoadMoreError(false);
+    try {
+      const page = await notesApi.listNotes(nextCursor);
+      const knownIds = new Set(notesRef.current.map((note) => note.id));
+      notesRef.current = [...notesRef.current, ...page.items.filter((note) => !knownIds.has(note.id))];
+      setNotes(notesRef.current);
+      setNextCursor(page.nextCursor);
+      setTotalCount(page.totalCount);
+    } catch (error) {
+      setLoadMoreError(true);
+      throw error;
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }
+
+  async function create() {
+    const input: CreateNoteInput = {
       title: "",
       body: "",
       color: "coral",
-      updatedAt: Date.now(),
     };
-    notesRef.current = [note, ...notesRef.current];
-    setNotes(notesRef.current);
-    setActiveId(note.id);
-    void enqueue(note.id, () => notesApi.createNote(note)).catch(() => undefined);
-    return note;
+    beginOperation();
+    try {
+      const note = await notesApi.createNote(input);
+      notesRef.current = [note, ...notesRef.current];
+      setNotes(notesRef.current);
+      setTotalCount((count) => count + 1);
+      setActiveId(note.id);
+      return note;
+    } catch (error) {
+      lastOperationFailed.current = true;
+      throw error;
+    } finally {
+      finishOperation();
+    }
   }
 
   function update(id: string, changes: Partial<NoteChanges>) {
@@ -216,6 +258,7 @@ export function useNotes() {
     }
     notesRef.current = notesRef.current.filter((note) => note.id !== id);
     setNotes(notesRef.current);
+    setTotalCount((count) => Math.max(0, count - 1));
     setActiveId((selected) => (selected === id ? (notesRef.current[0]?.id ?? null) : selected));
   }
 
@@ -226,6 +269,11 @@ export function useNotes() {
     ready,
     saveStatus,
     canRetry,
+    totalCount,
+    hasMore: nextCursor !== null,
+    loadingMore,
+    loadMoreError,
+    loadMore,
     create,
     update,
     retryFailed,
