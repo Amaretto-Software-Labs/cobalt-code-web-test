@@ -5,7 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { THEME_STORAGE_KEY, useTheme } from "@/hooks/use-theme";
 
 function mockSystemTheme(dark: boolean) {
-  const addEventListener = vi.fn();
+  let changeListener: ((event: MediaQueryListEvent) => void) | undefined;
+  const addEventListener = vi.fn((event: string, listener: (event: MediaQueryListEvent) => void) => {
+    if (event === "change") changeListener = listener;
+  });
   const removeEventListener = vi.fn();
   vi.stubGlobal("matchMedia", vi.fn(() => ({
     matches: dark,
@@ -17,10 +20,17 @@ function mockSystemTheme(dark: boolean) {
     removeListener: vi.fn(),
     dispatchEvent: vi.fn(),
   })));
-  return { addEventListener, removeEventListener };
+  return {
+    addEventListener,
+    removeEventListener,
+    change(matches: boolean) {
+      changeListener?.({ matches } as MediaQueryListEvent);
+    },
+  };
 }
 
 beforeEach(() => {
+  vi.restoreAllMocks();
   localStorage.clear();
   delete document.documentElement.dataset.theme;
   vi.unstubAllGlobals();
@@ -55,5 +65,37 @@ describe("useTheme", () => {
     expect(result.current.theme).toBe("dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
+  });
+
+  it("follows system changes only until the user makes an explicit choice", async () => {
+    const system = mockSystemTheme(false);
+    const { result } = renderHook(() => useTheme());
+    await waitFor(() => expect(result.current.theme).toBe("light"));
+
+    act(() => system.change(true));
+    expect(result.current.theme).toBe("dark");
+
+    act(() => result.current.toggleTheme());
+    expect(result.current.theme).toBe("light");
+
+    act(() => system.change(true));
+    expect(result.current.theme).toBe("light");
+  });
+
+  it("continues to work when browser storage is unavailable", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("Blocked", "SecurityError");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Blocked", "SecurityError");
+    });
+    mockSystemTheme(true);
+    const { result } = renderHook(() => useTheme());
+    await waitFor(() => expect(result.current.theme).toBe("dark"));
+
+    act(() => result.current.toggleTheme());
+
+    expect(result.current.theme).toBe("light");
+    expect(document.documentElement.dataset.theme).toBe("light");
   });
 });
