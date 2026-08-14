@@ -21,10 +21,16 @@ let inMemoryAuthToken: string | null = null;
 function storedAuthToken() {
   if (inMemoryAuthToken) return inMemoryAuthToken;
   try {
-    return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+    return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
+      || process.env.NEXT_PUBLIC_PAPIER_LOCAL_TOKEN
+      || null;
   } catch {
-    return null;
+    return process.env.NEXT_PUBLIC_PAPIER_LOCAL_TOKEN || null;
   }
+}
+
+export function notesApiPath(suffix = "") {
+  return `api/notes${suffix}`;
 }
 
 export function setAuthToken(token: string) {
@@ -59,14 +65,14 @@ async function requestJson(url: string, init?: RequestInit): Promise<unknown> {
 
 export async function listNotes(cursor?: string): Promise<NotesPage> {
   const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-  const page = parseNotesPage(await requestJson(`/api/notes${query}`));
+  const page = parseNotesPage(await requestJson(notesApiPath(query)));
   if (!page) throw new NotesApiError("The server returned an invalid notes page", 500);
   return page;
 }
 
 export async function createNote(input: CreateNoteInput): Promise<Note> {
   const created = parseNote(
-    await requestJson("/api/notes", {
+    await requestJson(notesApiPath(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
@@ -78,7 +84,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
 
 export async function updateNote(id: string, changes: NoteChanges): Promise<Note> {
   const updated = parseNote(
-    await requestJson(`/api/notes/${id}`, {
+    await requestJson(notesApiPath(`/${id}`), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(changes),
@@ -89,5 +95,5 @@ export async function updateNote(id: string, changes: NoteChanges): Promise<Note
 }
 
 export async function deleteNote(id: string): Promise<void> {
-  await requestJson(`/api/notes/${id}`, { method: "DELETE" });
+  await requestJson(notesApiPath(`/${id}`), { method: "DELETE" });
 }

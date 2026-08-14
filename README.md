@@ -38,7 +38,7 @@ This applies pending migrations, creates a production build, verifies the schema
 
 ## API documentation
 
-With the app running, interactive Swagger documentation is available at [http://localhost:3000/docs](http://localhost:3000/docs). The raw OpenAPI document is served from [http://localhost:3000/api/openapi](http://localhost:3000/api/openapi).
+With the app running, API documentation is available at [http://localhost:3000/docs](http://localhost:3000/docs). The raw OpenAPI document is served from [http://localhost:3000/api/openapi](http://localhost:3000/api/openapi).
 
 ## Quality checks
 

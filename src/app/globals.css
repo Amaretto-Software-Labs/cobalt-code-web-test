@@ -64,11 +64,24 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-.swagger-page { min-height: 100vh; background: #fff; padding: 18px 24px 48px; }
-.swagger-page .swagger-ui .topbar { display: none; }
-.swagger-page .swagger-ui .info { margin: 32px 0; }
-.swagger-page .swagger-ui .info .title { font-family: Georgia, "Times New Roman", serif; letter-spacing: -.5px; }
-.swagger-page .swagger-ui .scheme-container { border-radius: 10px; box-shadow: none; }
+.api-docs-page { width: min(920px, calc(100% - 48px)); min-height: 100vh; margin: 0 auto; padding: 72px 0; }
+.api-docs-header { padding-bottom: 42px; border-bottom: 1px solid var(--line); }
+.api-docs-kicker { color: var(--accent-dark); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.api-docs-header h1 { margin: 12px 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(38px, 7vw, 64px); letter-spacing: -2px; }
+.api-docs-header p { max-width: 620px; color: var(--muted); font-family: Georgia, "Times New Roman", serif; font-size: 18px; line-height: 1.6; }
+.api-docs-header a { display: inline-block; margin-top: 8px; color: var(--accent-dark); font-size: 13px; font-weight: 700; text-underline-offset: 3px; }
+.api-docs-auth, .api-docs-operations { padding-top: 38px; }
+.api-docs-page h2 { margin: 0 0 18px; font-family: Georgia, "Times New Roman", serif; font-size: 24px; }
+.api-docs-auth p { max-width: 720px; color: var(--ink-soft); line-height: 1.7; }
+.api-docs-page code { border-radius: 5px; background: var(--sidebar); padding: 3px 6px; font-size: 13px; }
+.api-operation-list { display: grid; gap: 10px; }
+.api-operation { display: grid; grid-template-columns: 72px minmax(210px, 1fr) 1.4fr; align-items: center; gap: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 16px; }
+.api-operation p { margin: 0; color: var(--muted); font-size: 13px; }
+.api-method { width: fit-content; border-radius: 5px; padding: 5px 7px; color: white; font-size: 10px; font-weight: 800; letter-spacing: .06em; }
+.api-method-get { background: #3176a8; }
+.api-method-post { background: #34835a; }
+.api-method-patch { background: #a56a28; }
+.api-method-delete { background: #b34e3b; }
 
 button, input, textarea { font: inherit; }
 button { color: inherit; }
