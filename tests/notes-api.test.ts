@@ -30,20 +30,36 @@ describe("notes API client", () => {
     expect(headers.has("Authorization")).toBe(false);
   });
 
+  it("uses the configured local preview token when browser storage is empty", async () => {
+    vi.stubEnv("NEXT_PUBLIC_PAPIER_LOCAL_TOKEN", "local-token");
+    vi.stubGlobal("window", {
+      localStorage: { getItem: vi.fn().mockReturnValue(null) },
+    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({ items: [], nextCursor: null, totalCount: 0 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listNotes();
+
+    const headers = fetchMock.mock.calls[0][1]?.headers as Headers;
+    expect(headers.get("X-Papier-Token")).toBe("local-token");
+  });
+
   it("loads and validates notes", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       Response.json({ items: [note], nextCursor: "next", totalCount: 12 }),
     );
     vi.stubGlobal("fetch", fetchMock);
     await expect(listNotes()).resolves.toEqual({ items: [note], nextCursor: "next", totalCount: 12 });
-    expect(fetchMock).toHaveBeenCalledWith("/api/notes", undefined);
+    expect(fetchMock).toHaveBeenCalledWith("api/notes", undefined);
   });
 
   it("URL-encodes continuation cursors", async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ items: [], nextCursor: null, totalCount: 0 }));
     vi.stubGlobal("fetch", fetchMock);
     await listNotes("a/b+c=");
-    expect(fetchMock).toHaveBeenCalledWith("/api/notes?cursor=a%2Fb%2Bc%3D", undefined);
+    expect(fetchMock).toHaveBeenCalledWith("api/notes?cursor=a%2Fb%2Bc%3D", undefined);
   });
 
   it("rejects an invalid server payload", async () => {
@@ -66,9 +82,9 @@ describe("notes API client", () => {
     await expect(updateNote(note.id, { ...note, title: "Updated" })).resolves.toMatchObject({ title: "Updated" });
     await expect(deleteNote(note.id)).resolves.toBeUndefined();
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      "/api/notes",
-      `/api/notes/${note.id}`,
-      `/api/notes/${note.id}`,
+      "api/notes",
+      `api/notes/${note.id}`,
+      `api/notes/${note.id}`,
     ]);
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual(createInput);
   });

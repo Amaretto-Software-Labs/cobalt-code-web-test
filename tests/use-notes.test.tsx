@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   updateNote: vi.fn(),
   deleteNote: vi.fn(),
   setAuthToken: vi.fn(),
+  notesApiPath: vi.fn((suffix = "") => `api/notes${suffix}`),
   authorizationHeaders: vi.fn((headers: HeadersInit) => new Headers(headers)),
 }));
 
@@ -217,7 +218,7 @@ describe("useNotes persistence orchestration", () => {
     act(() => { window.dispatchEvent(new Event("pagehide")); });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      `/api/notes/${existingNote.id}`,
+      `api/notes/${existingNote.id}`,
       expect.objectContaining({ body: expect.stringContaining("Latest body"), keepalive: true }),
     );
     vi.unstubAllGlobals();

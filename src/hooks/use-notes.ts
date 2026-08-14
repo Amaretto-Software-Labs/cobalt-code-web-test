@@ -123,7 +123,7 @@ export function useNotes() {
 
     function flushPendingNotes() {
       for (const note of pendingNotes.current.values()) {
-        void fetch(`/api/notes/${note.id}`, {
+        void fetch(notesApi.notesApiPath(`/${note.id}`), {
           method: "PATCH",
           headers: notesApi.authorizationHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify(note),
