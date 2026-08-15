@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Note } from "@/domain/note";
 
 const api = vi.hoisted(() => ({
@@ -57,6 +57,11 @@ beforeEach(() => {
   api.deleteNote.mockResolvedValue(undefined);
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
 describe("useNotes persistence orchestration", () => {
   it("accepts a bearer token and retries an unauthorized initial load", async () => {
     api.listNotes
@@ -82,6 +87,40 @@ describe("useNotes persistence orchestration", () => {
     expect(result.current.activeId).toBe(existingNote.id);
     expect(result.current.totalCount).toBe(12);
     expect(result.current.saveStatus).toBe("saved");
+  });
+
+  it("polls for notes created or deleted in another browser", async () => {
+    const secondNote = { ...existingNote, id: "7bc7c6d1-3ef9-46d4-bdd7-a35a48655177", title: "New elsewhere" };
+    vi.useFakeTimers();
+    api.listNotes
+      .mockResolvedValueOnce({ items: [existingNote], nextCursor: null, totalCount: 1 })
+      .mockResolvedValueOnce({ items: [secondNote], nextCursor: null, totalCount: 1 });
+
+    const { result } = renderHook(() => useNotes());
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(result.current.ready).toBe(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+
+    expect(api.listNotes).toHaveBeenCalledTimes(2);
+    expect(result.current.notes).toEqual([secondNote]);
+    expect(result.current.activeId).toBe(secondNote.id);
+    expect(result.current.totalCount).toBe(1);
+  });
+
+  it("does not overwrite an unsaved edit with a polled value", async () => {
+    vi.useFakeTimers();
+    api.listNotes.mockResolvedValue({ items: [existingNote], nextCursor: null, totalCount: 1 });
+    api.updateNote.mockImplementation(() => new Promise<Note>(() => undefined));
+    const { result } = renderHook(() => useNotes());
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(result.current.ready).toBe(true);
+
+    act(() => result.current.update(existingNote.id, { title: "Unsaved locally" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+
+    expect(api.listNotes).toHaveBeenCalledTimes(2);
+    expect(result.current.notes[0].title).toBe("Unsaved locally");
   });
 
   it("loads and de-duplicates a continuation page", async () => {

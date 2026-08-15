@@ -8,6 +8,7 @@ export type SaveStatus = "loading" | "saved" | "saving" | "error";
 
 const STORAGE_KEY = "papier-notes";
 const SAVE_DELAY_MS = 450;
+const POLL_INTERVAL_MS = 5_000;
 
 export function useNotes() {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -31,6 +32,7 @@ export function useNotes() {
   const readyRef = useRef(false);
   const loadFailed = useRef(false);
   const loadingMoreRef = useRef(false);
+  const pollingRef = useRef(false);
 
   function refreshPersistence() {
     if (!readyRef.current) return;
@@ -79,6 +81,37 @@ export function useNotes() {
 
   useEffect(() => {
     let cancelled = false;
+    let pollTimer: ReturnType<typeof setInterval> | undefined;
+
+    function applyPolledPage(page: Awaited<ReturnType<typeof notesApi.listNotes>>) {
+      const serverIds = new Set(page.items.map((note) => note.id));
+      const polledNotes = page.items.map((note) => pendingNotes.current.get(note.id) ?? note);
+      const nextNotes = page.nextCursor === null
+        ? polledNotes
+        : [...polledNotes, ...notesRef.current.filter((note) => !serverIds.has(note.id))];
+
+      notesRef.current = nextNotes;
+      setNotes(nextNotes);
+      setTotalCount(page.totalCount);
+      setActiveId((selected) => (
+        selected && nextNotes.some((note) => note.id === selected)
+          ? selected
+          : (nextNotes[0]?.id ?? null)
+      ));
+    }
+
+    async function poll() {
+      if (cancelled || pollingRef.current || !readyRef.current) return;
+      pollingRef.current = true;
+      try {
+        const page = await notesApi.listNotes();
+        if (!cancelled) applyPolledPage(page);
+      } catch {
+        // Keep the last known notes visible and try again on the next interval.
+      } finally {
+        pollingRef.current = false;
+      }
+    }
 
     async function load() {
       try {
@@ -132,13 +165,17 @@ export function useNotes() {
       }
     }
 
-    void load();
+    void load().then(() => {
+      if (!cancelled) pollTimer = setInterval(() => void poll(), POLL_INTERVAL_MS);
+    });
     window.addEventListener("pagehide", flushPendingNotes);
     const activeTimers = timers.current;
     return () => {
       cancelled = true;
       window.removeEventListener("pagehide", flushPendingNotes);
       flushPendingNotes();
+      if (pollTimer) clearInterval(pollTimer);
+      pollingRef.current = false;
       activeTimers.forEach(clearTimeout);
     };
   }, [authRevision]);
