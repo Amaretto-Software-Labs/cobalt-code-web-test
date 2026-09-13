@@ -32,7 +32,7 @@ export const NOTE_PAGE_SIZE = {
 } as const;
 
 export const NOTE_LIMITS = {
-  title: 500,
+  title: 499,
   body: 100_000,
 } as const;
 
