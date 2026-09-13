@@ -20,6 +20,23 @@ const validNote = {
 };
 
 describe("note domain validation", () => {
+  it("preserves the 500-character title contract across writes, reads, and legacy import", () => {
+    const note = { ...validNote, title: "x".repeat(500) };
+    const changes = { title: note.title, body: note.body, color: note.color };
+    expect(parseCreateNoteInput(changes)).toEqual(changes);
+    expect(parseNoteChanges(changes)).toEqual(changes);
+    expect(parseNote(note)).toEqual(note);
+    expect(parseNotesPage({ items: [note], nextCursor: null, totalCount: 1 })).not.toBeNull();
+    expect(parseLegacyNotes(JSON.stringify([note]))).toEqual([note]);
+
+    const oversized = { ...note, title: "x".repeat(501) };
+    expect(parseCreateNoteInput({ ...changes, title: oversized.title })).toBeNull();
+    expect(parseNoteChanges(oversized)).toBeNull();
+    expect(parseNote(oversized)).toBeNull();
+    expect(parseNotesPage({ items: [oversized], nextCursor: null, totalCount: 1 })).toBeNull();
+    expect(parseLegacyNotes(JSON.stringify([oversized]))).toEqual([]);
+  });
+
   it("accepts a valid note without retaining unknown fields", () => {
     expect(parseNote({ ...validNote, ignored: true })).toEqual(validNote);
   });
