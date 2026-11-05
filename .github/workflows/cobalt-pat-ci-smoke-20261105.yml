@@ -1,0 +1,15 @@
+name: Cobalt PAT CI smoke
+on:
+  push:
+    branches:
+      - codex/gh-pat-ci-20261105-source
+permissions: {}
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Observe a harmless CI run
+        run: |
+          echo "Cobalt PAT CI smoke fixture"
+          sleep 20
+          exit 0
